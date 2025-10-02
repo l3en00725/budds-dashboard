@@ -1,2 +1,152 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {\n  withErrorHandling,\n  OperationalError,\n  IntegrationError,\n  AuthenticationError,\n  ValidationError,\n  RateLimitError\n} from '@/lib/error-handler';\nimport * as Sentry from '@sentry/nextjs';\n\n// This endpoint is for testing error handling and monitoring\n// DO NOT USE IN PRODUCTION - remove before deploying\n\nasync function testErrorHandler(request: NextRequest) {\n  // Only allow in development\n  if (process.env.NODE_ENV === 'production') {\n    return NextResponse.json(\n      { error: 'Test endpoints not available in production' },\n      { status: 404 }\n    );\n  }\n\n  const { searchParams } = new URL(request.url);\n  const errorType = searchParams.get('type');\n\n  // Add test context to Sentry\n  Sentry.setContext('error_test', {\n    type: errorType,\n    timestamp: new Date().toISOString(),\n    environment: process.env.NODE_ENV,\n  });\n\n  switch (errorType) {\n    case 'operational':\n      throw new OperationalError(\n        'Test operational error',\n        500,\n        'TEST_OPERATIONAL',\n        { testData: 'This is a test operational error' }\n      );\n\n    case 'integration_jobber':\n      throw new IntegrationError(\n        'jobber',\n        'Test Jobber integration failure',\n        new Error('Simulated API failure'),\n        { endpoint: '/test', statusCode: 503 }\n      );\n\n    case 'integration_openphone':\n      throw new IntegrationError(\n        'openphone',\n        'Test OpenPhone integration failure',\n        new Error('Simulated connection timeout'),\n        { timeout: 5000 }\n      );\n\n    case 'integration_supabase':\n      throw new IntegrationError(\n        'supabase',\n        'Test Supabase database error',\n        new Error('Connection pool exhausted'),\n        { poolSize: 10 }\n      );\n\n    case 'auth':\n      throw new AuthenticationError(\n        'Test authentication failure',\n        { provider: 'test', tokenExpired: true }\n      );\n\n    case 'validation':\n      throw new ValidationError(\n        'Test validation error',\n        { field: 'testField', value: 'invalid', expectedFormat: 'email' }\n      );\n\n    case 'rate_limit':\n      throw new RateLimitError(\n        'test_service',\n        60,\n        { requestsPerMinute: 100, currentCount: 101 }\n      );\n\n    case 'unhandled':\n      // Simulate an unhandled error\n      throw new Error('This is an unhandled error for testing');\n\n    case 'async_error':\n      // Test async error handling\n      setTimeout(() => {\n        throw new Error('Async error that should be caught by global handler');\n      }, 100);\n      return NextResponse.json({ message: 'Async error triggered' });\n\n    case 'promise_rejection':\n      // Test unhandled promise rejection\n      Promise.reject(new Error('Unhandled promise rejection test'));\n      return NextResponse.json({ message: 'Promise rejection triggered' });\n\n    case 'sentry_test':\n      // Test direct Sentry capture\n      Sentry.captureException(new Error('Direct Sentry test error'), {\n        tags: { test: true },\n        extra: { testContext: 'Direct capture test' },\n      });\n      return NextResponse.json({ message: 'Sentry test error sent' });\n\n    case 'performance':\n      // Test performance monitoring\n      const transaction = Sentry.startTransaction({\n        name: 'test_performance_transaction',\n        op: 'test',\n      });\n\n      const span = transaction.startChild({\n        description: 'Slow operation simulation',\n        op: 'test.slow',\n      });\n\n      // Simulate slow operation\n      await new Promise(resolve => setTimeout(resolve, 2000));\n\n      span.finish();\n      transaction.finish();\n\n      return NextResponse.json({ message: 'Performance test completed' });\n\n    default:\n      return NextResponse.json({\n        message: 'Error testing endpoint',\n        availableTypes: [\n          'operational',\n          'integration_jobber',\n          'integration_openphone',\n          'integration_supabase',\n          'auth',\n          'validation',\n          'rate_limit',\n          'unhandled',\n          'async_error',\n          'promise_rejection',\n          'sentry_test',\n          'performance',\n        ],\n        usage: 'Add ?type=<error_type> to test specific error scenarios',\n      });\n  }\n}\n\nexport const GET = withErrorHandling(testErrorHandler, 'error_testing');
+import {
+  withErrorHandling,
+  OperationalError,
+  IntegrationError,
+  AuthenticationError,
+  ValidationError,
+  RateLimitError
+} from '@/lib/error-handler';
+import * as Sentry from '@sentry/nextjs';
+
+// This endpoint is for testing error handling and monitoring
+// DO NOT USE IN PRODUCTION - remove before deploying
+
+async function testErrorHandler(request: NextRequest) {
+  // Only allow in development
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Test endpoints not available in production' },
+      { status: 404 }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const errorType = searchParams.get('type');
+
+  // Add test context to Sentry
+  Sentry.setContext('error_test', {
+    type: errorType,
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+  });
+
+  switch (errorType) {
+    case 'operational':
+      throw new OperationalError(
+        'Test operational error',
+        500,
+        'TEST_OPERATIONAL',
+        { testData: 'This is a test operational error' }
+      );
+
+    case 'integration_jobber':
+      throw new IntegrationError(
+        'jobber',
+        'Test Jobber integration failure',
+        new Error('Simulated API failure'),
+        { endpoint: '/test', statusCode: 503 }
+      );
+
+    case 'integration_openphone':
+      throw new IntegrationError(
+        'openphone',
+        'Test OpenPhone integration failure',
+        new Error('Simulated connection timeout'),
+        { timeout: 5000 }
+      );
+
+    case 'integration_supabase':
+      throw new IntegrationError(
+        'supabase',
+        'Test Supabase database error',
+        new Error('Connection pool exhausted'),
+        { poolSize: 10 }
+      );
+
+    case 'auth':
+      throw new AuthenticationError(
+        'Test authentication failure',
+        { provider: 'test', tokenExpired: true }
+      );
+
+    case 'validation':
+      throw new ValidationError(
+        'Test validation error',
+        { field: 'testField', value: 'invalid', expectedFormat: 'email' }
+      );
+
+    case 'rate_limit':
+      throw new RateLimitError(
+        'test_service',
+        60,
+        { requestsPerMinute: 100, currentCount: 101 }
+      );
+
+    case 'unhandled':
+      // Simulate an unhandled error
+      throw new Error('This is an unhandled error for testing');
+
+    case 'async_error':
+      // Test async error handling
+      setTimeout(() => {
+        throw new Error('Async error that should be caught by global handler');
+      }, 100);
+      return NextResponse.json({ message: 'Async error triggered' });
+
+    case 'promise_rejection':
+      // Test unhandled promise rejection
+      Promise.reject(new Error('Unhandled promise rejection test'));
+      return NextResponse.json({ message: 'Promise rejection triggered' });
+
+    case 'sentry_test':
+      // Test direct Sentry capture
+      Sentry.captureException(new Error('Direct Sentry test error'), {
+        tags: { test: true },
+        extra: { testContext: 'Direct capture test' },
+      });
+      return NextResponse.json({ message: 'Sentry test error sent' });
+
+    case 'performance':
+      // Test performance monitoring
+      const transaction = Sentry.startTransaction({
+        name: 'test_performance_transaction',
+        op: 'test',
+      });
+
+      const span = transaction.startChild({
+        description: 'Slow operation simulation',
+        op: 'test.slow',
+      });
+
+      // Simulate slow operation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      span.finish();
+      transaction.finish();
+
+      return NextResponse.json({ message: 'Performance test completed' });
+
+    default:
+      return NextResponse.json({
+        message: 'Error testing endpoint',
+        availableTypes: [
+          'operational',
+          'integration_jobber',
+          'integration_openphone',
+          'integration_supabase',
+          'auth',
+          'validation',
+          'rate_limit',
+          'unhandled',
+          'async_error',
+          'promise_rejection',
+          'sentry_test',
+          'performance',
+        ],
+        usage: 'Add ?type=<error_type> to test specific error scenarios',
+      });
+  }
+}
+
+export const GET = withErrorHandling(testErrorHandler, 'error_testing');
