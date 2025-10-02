@@ -1,5 +1,7 @@
 # Budd's Dashboard
 
+> 🔒 **Private Repository** - This is a private business application for Budd's Plumbing & HVAC
+
 Executive dashboard for plumbing and HVAC businesses integrating Jobber CRM and OpenPhone. Features real-time financial metrics, month-over-month trends, AR aging, and call analytics with automated data sync.
 
 ## 🚀 Features
@@ -93,9 +95,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ### Installation
 
-1. **Clone the repository**
+1. **Clone the repository** (Private repository - requires access)
    ```bash
-   git clone https://github.com/YOUR_USERNAME/budds-dashboard.git
+   git clone https://github.com/l3en00725/budds-dashboard.git
    cd budds-dashboard
    ```
 
