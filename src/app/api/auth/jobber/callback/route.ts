@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { storeOAuthToken } from '@/lib/oauth-tokens';
 
 export const runtime = 'nodejs';
@@ -40,15 +41,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Validate state against the stored cookie
-  const storedState = request.cookies.get('jobber_oauth_state')?.value;
+  // Validate state against the stored cookie using next/headers
+  const cookieStore = await cookies();
+  const storedState = cookieStore.get('jobber_oauth_state')?.value;
 
   console.log('OAuth state validation debug:', {
     receivedState: state?.substring(0, 8) + '...',
     storedState: storedState?.substring(0, 8) + '...',
     hasStoredState: !!storedState,
     statesMatch: storedState === state,
-    allCookies: Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value?.substring(0, 8) + '...']))
   });
 
   if (!storedState || storedState !== state) {
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Clear the OAuth state cookie
-    response.cookies.delete('jobber_oauth_state');
+    cookieStore.delete('jobber_oauth_state');
 
     console.log('OAuth flow completed successfully, redirecting to dashboard');
     return response;
