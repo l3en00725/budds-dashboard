@@ -2,15 +2,7 @@
   "crons": [
     {
       "path": "/api/sync/jobber",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/sync/quickbooks",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/sync/openphone",
-      "schedule": "0 10 * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }
