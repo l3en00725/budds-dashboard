@@ -35,6 +35,7 @@ const eslintConfig = [
       "src/components/dashboard/CallAnalyticsWidget.tsx",
       "src/components/dashboard/DashboardContent.tsx",
       "src/components/dashboard/JobPerformanceWidget.tsx",
+      "src/app/dashboard/page.tsx",
     ],
   },
 ];
