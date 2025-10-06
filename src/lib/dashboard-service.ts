@@ -326,7 +326,7 @@ export class DashboardService {
       .single();
 
     const current = todayPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
-    const target = targets?.target_value || 13000;
+    const target = targets?.target_value || 3000;
     const percentage = (current / target) * 100;
 
     return {
@@ -605,7 +605,7 @@ export class DashboardService {
 
     console.log(`Daily Revenue Debug (Executive): Found ${todayPayments?.length || 0} payments collected today (Eastern Time: ${easternToday}) totaling $${dailyCollectedRevenue}`);
     console.log('Executive Payments Details:', todayPayments);
-    const dailyGoal = 13000; // Updated to correct $13K goal
+    const dailyGoal = 3000; // Realistic daily goal based on actual business performance
 
     const arOutstanding = outstandingInvoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
@@ -849,30 +849,50 @@ export class DashboardService {
   async getYTDRevenue(): Promise<DashboardMetrics['ytdRevenue']> {
     const supabase = await this.getSupabase();
     const currentYear = new Date().getFullYear();
+    const lastYear = currentYear - 1;
 
     try {
-      const { data: revenue } = await supabase
-        .from('quickbooks_revenue_ytd')
-        .select('ttm_revenue, ttm_revenue_last_year')
-        .eq('year', currentYear)
-        .order('pulled_at', { ascending: false })
-        .limit(1)
-        .single();
+      // Use Jobber payments data instead of QuickBooks for YTD calculations
+      const startOfCurrentYear = `${currentYear}-01-01`;
+      const startOfLastYear = `${lastYear}-01-01`;
+      const endOfLastYear = `${lastYear}-12-31`;
 
-      const current = revenue?.ttm_revenue || 0;
-      const lastYear = revenue?.ttm_revenue_last_year || 0;
-      const growth = lastYear > 0 ? ((current - lastYear) / lastYear) * 100 : 0;
+      // Get current YTD payments
+      const { data: currentYTDPayments } = await supabase
+        .from('jobber_payments')
+        .select('amount')
+        .gte('payment_date', startOfCurrentYear)
+        .gt('amount', 0);
+
+      // Get last year's YTD payments for same period
+      const today = new Date();
+      const currentDayOfYear = Math.floor((today.getTime() - new Date(currentYear, 0, 1).getTime()) / (1000 * 60 * 60 * 24));
+      const lastYearSameDate = new Date(lastYear, 0, currentDayOfYear);
+      const lastYearSameDateString = lastYearSameDate.toISOString().split('T')[0];
+
+      const { data: lastYTDPayments } = await supabase
+        .from('jobber_payments')
+        .select('amount')
+        .gte('payment_date', startOfLastYear)
+        .lte('payment_date', lastYearSameDateString)
+        .gt('amount', 0);
+
+      const current = currentYTDPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+      const lastYearSamePeriod = lastYTDPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+      const growth = lastYearSamePeriod > 0 ? ((current - lastYearSamePeriod) / lastYearSamePeriod) * 100 : 0;
+
+      console.log(`YTD Revenue: Current=${current}, LastYear=${lastYearSamePeriod}, Growth=${growth}%`);
 
       return {
         current,
-        lastYear,
+        lastYear: lastYearSamePeriod,
         growth,
         direction: growth >= 0 ? 'up' : 'down',
       };
     } catch (error) {
-      console.error('Error fetching YTD revenue:', error);
+      console.error('Error fetching YTD revenue from Jobber data:', error);
 
-      // Return fallback data if QuickBooks data is not available
+      // Return fallback data if Jobber data is not available
       return {
         current: 0,
         lastYear: 0,

@@ -24,18 +24,7 @@ export function DashboardContent() {
       canManualSync: true,
       autoSyncEnabled: true,
       syncDuration: 45
-    },
-    {
-      id: 'quickbooks',
-      name: 'QuickBooks' as const,
-      status: 'connected' as const,
-      lastSync: new Date().toISOString(),
-      lastSuccessfulSync: new Date().toISOString(),
-      recordCount: 890,
-      canManualSync: true,
-      autoSyncEnabled: true,
-      syncDuration: 32
-    },
+},
     {
       id: 'openphone',
       name: 'OpenPhone' as const,
@@ -159,7 +148,6 @@ export function DashboardContent() {
         actualRevenue: Math.floor(Math.random() * 8000) + 5000,
         targetRevenue: 13000,
         jobberRevenue: Math.floor(Math.random() * 5000) + 3000,
-        quickbooksRevenue: Math.floor(Math.random() * 3000) + 2000,
         dailyGoal: 13000,
         percentage: Math.floor(Math.random() * 40) + 60,
         status: 'green' as const,
@@ -281,9 +269,6 @@ export function DashboardContent() {
         case 'openphone':
           endpoint = '/api/sync/openphone';
           break;
-        case 'quickbooks':
-          endpoint = '/api/sync/quickbooks';
-          break;
         default:
           throw new Error(`Unknown source: ${sourceId}`);
       }
@@ -362,23 +347,7 @@ export function DashboardContent() {
 
       {/* Streamlined Analytics Section */}
       <div className="space-y-8">
-        {/* Single Unified Sync Button */}
-        <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-100">Data Sync</h3>
-              <p className="text-sm text-gray-400">Last sync: {new Date().toLocaleTimeString()}</p>
-            </div>
-            <button
-              onClick={handleGlobalSync}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-            >
-              Sync All Data
-            </button>
-          </div>
-        </div>
-
-        {/* Daily Revenue Tracking - Keep this as primary daily widget */}
+        {/* Daily Revenue Tracking - Primary daily widget */}
         <DailyRevenueTracker data={generateDailyRevenueData()} />
 
         {/* Year-over-Year Analysis - Keep only this chart (removed MoM duplicate) */}
