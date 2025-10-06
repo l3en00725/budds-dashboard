@@ -1,34 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { storeOAuthToken } from '@/lib/oauth-tokens';
 
-const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID!;
-const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET!;
-const JOBBER_REDIRECT_URI = process.env.JOBBER_REDIRECT_URI!;
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID?.trim();
+  const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET?.trim();
+  const JOBBER_REDIRECT_URI = process.env.JOBBER_REDIRECT_URI?.trim();
+
+  if (!JOBBER_CLIENT_ID || !JOBBER_CLIENT_SECRET || !JOBBER_REDIRECT_URI) {
+    return NextResponse.json(
+      { error: 'Missing required environment variables' },
+      { status: 500 }
+    );
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=${error}`);
+    console.error('OAuth authorization error:', error);
+    const errorDescription = searchParams.get('error_description') || 'Unknown error';
+    return NextResponse.json(
+      {
+        error: `OAuth authorization failed: ${error}`,
+        description: errorDescription,
+        hint: 'This usually means the user denied access or there was an issue with the authorization request.'
+      },
+      { status: 400 }
+    );
   }
 
-  if (!code) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=no_code`);
+  if (!code || !state) {
+    return NextResponse.json(
+      { error: 'Missing code or state parameter' },
+      { status: 400 }
+    );
+  }
+
+  // Validate state against the stored cookie
+  const storedState = request.cookies.get('jobber_oauth_state')?.value;
+  if (!storedState || storedState !== state) {
+    console.error('CSRF state validation failed:', {
+      receivedState: state?.substring(0, 8) + '...',
+      hasStoredState: !!storedState,
+      statesMatch: storedState === state
+    });
+    return NextResponse.json(
+      {
+        error: 'Invalid state parameter - CSRF protection failed',
+        hint: 'This could be due to cookies being disabled, the request taking too long, or a potential security issue.'
+      },
+      { status: 401 }
+    );
   }
 
   try {
-    // Exchange code for access token
+    // Exchange the code for tokens
     const tokenResponse = await fetch('https://api.getjobber.com/api/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        grant_type: 'authorization_code',
         client_id: JOBBER_CLIENT_ID,
         client_secret: JOBBER_CLIENT_SECRET,
+        grant_type: 'authorization_code',
         code,
         redirect_uri: JOBBER_REDIRECT_URI,
       }).toString(),
@@ -37,35 +76,77 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error(`Token exchange failed: ${tokenResponse.status}`, errorText);
-      throw new Error(`Token exchange failed: ${tokenResponse.status}`);
+      return NextResponse.json(
+        {
+          error: 'Token exchange failed',
+          status: tokenResponse.status,
+          details: errorText
+        },
+        { status: 500 }
+      );
     }
 
     const tokenData = await tokenResponse.json();
-    console.log('Token exchange response:', tokenData);
+    console.log('Token exchange successful:', {
+      hasAccessToken: !!tokenData.access_token,
+      hasRefreshToken: !!tokenData.refresh_token,
+      expiresIn: tokenData.expires_in,
+      tokenType: tokenData.token_type
+    });
 
-    // Store the access token (you might want to encrypt this)
-    const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
+    if (!tokenData.access_token) {
+      return NextResponse.json(
+        { error: 'No access_token in response', response: tokenData },
+        { status: 500 }
+      );
+    }
 
-    // Set secure cookie for the access token (temporarily non-httpOnly for sync functionality)
+    // Store tokens securely in Supabase database
+    try {
+      await storeOAuthToken('jobber', {
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_type: tokenData.token_type,
+        expires_in: tokenData.expires_in,
+        scope: tokenData.scope
+      });
+
+      console.log('Jobber tokens stored securely in database');
+    } catch (error) {
+      console.error('Failed to store tokens in database:', error);
+      return NextResponse.json(
+        {
+          error: 'Failed to store tokens securely',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
+
+    // Store minimal access token in cookie for immediate client access
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const response = NextResponse.redirect(`${baseUrl}/dashboard`);
+
     response.cookies.set('jobber_access_token', tokenData.access_token, {
       httpOnly: false, // Allow client-side access for sync functionality
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: tokenData.expires_in || 7200, // Default to 2 hours instead of 1
+      maxAge: tokenData.expires_in || 7200,
     });
 
-    if (tokenData.refresh_token) {
-      response.cookies.set('jobber_refresh_token', tokenData.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-      });
-    }
+    // Clear the OAuth state cookie
+    response.cookies.delete('jobber_oauth_state');
 
+    console.log('OAuth flow completed successfully, redirecting to dashboard');
     return response;
   } catch (error) {
     console.error('OAuth callback error:', error);
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=token_exchange_failed`);
+    return NextResponse.json(
+      {
+        error: 'Token exchange failed',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
   }
 }
