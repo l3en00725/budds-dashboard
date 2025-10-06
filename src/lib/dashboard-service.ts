@@ -326,7 +326,7 @@ export class DashboardService {
       .single();
 
     const current = todayPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
-    const target = targets?.target_value || 3000;
+    const target = targets?.target_value || 13000;
     const percentage = (current / target) * 100;
 
     return {
@@ -605,7 +605,7 @@ export class DashboardService {
 
     console.log(`Daily Revenue Debug (Executive): Found ${todayPayments?.length || 0} payments collected today (Eastern Time: ${easternToday}) totaling $${dailyCollectedRevenue}`);
     console.log('Executive Payments Details:', todayPayments);
-    const dailyGoal = 3000; // Realistic daily goal based on actual business performance
+    const dailyGoal = 13000; // Daily revenue goal
 
     const arOutstanding = outstandingInvoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
@@ -864,9 +864,9 @@ export class DashboardService {
         .gte('payment_date', startOfCurrentYear)
         .gt('amount', 0);
 
-      // Get last year's YTD payments for same period
+      // Get last year's YTD payments for same period (comparing same date ranges)
       const today = new Date();
-      const currentDayOfYear = Math.floor((today.getTime() - new Date(currentYear, 0, 1).getTime()) / (1000 * 60 * 60 * 24));
+      const currentDayOfYear = Math.floor((today.getTime() - new Date(currentYear, 0, 1).getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const lastYearSameDate = new Date(lastYear, 0, currentDayOfYear);
       const lastYearSameDateString = lastYearSameDate.toISOString().split('T')[0];
 

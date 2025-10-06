@@ -340,12 +340,7 @@ export function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6 space-y-8">
-      {/* Executive Dashboard - Full Width */}
-      <div className="relative -mx-8 -mt-8">
-        <ExecutiveDashboard metrics={metrics.executiveMetrics} />
-      </div>
-
-      {/* Streamlined Analytics Section */}
+      {/* Main Analytics Section */}
       <div className="space-y-8">
         {/* Daily Revenue Tracking - Primary daily widget */}
         <DailyRevenueTracker data={generateDailyRevenueData()} />
