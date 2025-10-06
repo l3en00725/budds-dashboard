@@ -587,19 +587,13 @@ export class DashboardService {
     }
     const revenueCollectedLastMonth = lastMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
 
-    // Get INVOICES ISSUED TODAY for daily revenue (to match Jobber's Transaction List logic)
-    const actualToday = new Date().toISOString().split('T')[0]; // Use system date to match test data
-
-    const { data: todayIssuedInvoices } = await supabase
-      .from('jobber_invoices')
-      .select('amount, status, issue_date, invoice_number, client_name')
-      .eq('issue_date', actualToday)  // Use exact date match instead of datetime range
-      .in('status', ['issued', 'sent', 'completed', 'paid', 'overdue'])  // Valid invoice statuses
-      .gt('amount', 0);
-
     // Calculate daily revenue from PAYMENTS COLLECTED TODAY (Eastern Time)
     const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const easternToday = easternNow.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+
+    console.log(`=== DAILY REVENUE DEBUG (getExecutiveMetrics) ===`);
+    console.log(`Eastern Now: ${easternNow.toISOString()}`);
+    console.log(`Eastern Today Date: ${easternToday}`);
 
     const { data: todayPayments } = await supabase
       .from('jobber_payments')
