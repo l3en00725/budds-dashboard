@@ -3,13 +3,10 @@
 import { useEffect, useState } from 'react';
 import { DashboardMetrics } from '@/lib/dashboard-service';
 import MembershipCard from './MembershipCard';
-import { CallAnalyticsWidget } from './CallAnalyticsWidget';
 import { ExecutiveDashboard } from './ExecutiveDashboard';
-import { MoMAnalyticsCharts } from './MoMAnalyticsCharts';
 import { YoYComparisonCharts } from './YoYComparisonCharts';
 import { EnhancedARAgingWidget } from './EnhancedARAgingWidget';
 import { DailyRevenueTracker } from './DailyRevenueTracker';
-import { SyncStatusControls } from './SyncStatusControls';
 import { OpenPhoneIntegration } from './OpenPhoneIntegration';
 
 export function DashboardContent() {
@@ -107,32 +104,7 @@ export function DashboardContent() {
     return null;
   }
 
-  // Mock data generators for new components
-  const generateMoMData = () => ({
-    currentMonth: {
-      issued: metrics.executiveMetrics.revenue.revenueIssuedMTD.amount,
-      collected: metrics.executiveMetrics.revenue.revenueCollectedMTD.amount,
-      issuedChange: metrics.executiveMetrics.revenue.issuedVsPaidMoM.issuedChange,
-      collectedChange: metrics.executiveMetrics.revenue.issuedVsPaidMoM.paidChange,
-      status: metrics.executiveMetrics.revenue.issuedVsPaidMoM.status
-    },
-    historicalData: Array.from({ length: 6 }, (_, i) => {
-      const month = new Date();
-      month.setMonth(month.getMonth() - (5 - i));
-      return {
-        month: month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        revenueIssued: Math.floor(Math.random() * 50000) + 150000,
-        revenueCollected: Math.floor(Math.random() * 50000) + 140000,
-        changePercent: Math.floor(Math.random() * 30) - 10,
-        status: 'green' as const
-      };
-    }),
-    seasonalPatterns: {
-      strongMonths: ['Mar', 'Apr', 'May', 'Sep', 'Oct'],
-      weakMonths: ['Dec', 'Jan', 'Feb'],
-      avgGrowthRate: 8.5
-    }
-  });
+  // Mock data generators for components
 
   const generateYoYData = () => ({
     ytdSummary: {
@@ -172,15 +144,8 @@ export function DashboardContent() {
       sources: [
         {
           source: 'Jobber' as const,
-          amount: Math.floor(metrics.executiveMetrics.revenue.dailyClosedRevenue.amount * 0.7),
-          percentage: 70,
-          lastSync: new Date().toISOString(),
-          status: 'connected' as const
-        },
-        {
-          source: 'QuickBooks' as const,
-          amount: Math.floor(metrics.executiveMetrics.revenue.dailyClosedRevenue.amount * 0.3),
-          percentage: 30,
+          amount: metrics.executiveMetrics.revenue.dailyClosedRevenue.amount,
+          percentage: 100,
           lastSync: new Date().toISOString(),
           status: 'connected' as const
         }
@@ -307,12 +272,60 @@ export function DashboardContent() {
 
   const handleManualSync = async (sourceId: string) => {
     console.log(`Manual sync triggered for ${sourceId}`);
-    // In a real implementation, this would call the actual sync API
+    try {
+      let endpoint = '';
+      switch (sourceId) {
+        case 'jobber':
+          endpoint = '/api/sync/jobber';
+          break;
+        case 'openphone':
+          endpoint = '/api/sync/openphone';
+          break;
+        case 'quickbooks':
+          endpoint = '/api/sync/quickbooks';
+          break;
+        default:
+          throw new Error(`Unknown source: ${sourceId}`);
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Sync failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log(`${sourceId} sync completed:`, result);
+
+      // Refresh metrics after sync
+      window.location.reload();
+    } catch (error) {
+      console.error(`Error syncing ${sourceId}:`, error);
+      alert(`Failed to sync ${sourceId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleGlobalSync = async () => {
-    console.log('Global sync triggered');
-    // In a real implementation, this would call the global sync API
+    console.log('Global sync triggered - syncing all sources');
+    try {
+      // Sync all sources in parallel
+      const syncPromises = [
+        fetch('/api/sync/jobber', { method: 'POST' }),
+        fetch('/api/sync/openphone', { method: 'POST' })
+      ];
+
+      const responses = await Promise.all(syncPromises);
+      console.log('All syncs completed');
+
+      // Refresh metrics after all syncs
+      window.location.reload();
+    } catch (error) {
+      console.error('Error during global sync:', error);
+      alert(`Global sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleToggleAutoSync = (enabled: boolean) => {
@@ -341,67 +354,55 @@ export function DashboardContent() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6 space-y-8">
       {/* Executive Dashboard - Full Width */}
       <div className="relative -mx-8 -mt-8">
         <ExecutiveDashboard metrics={metrics.executiveMetrics} />
       </div>
 
-      {/* Enhanced Analytics Section */}
+      {/* Streamlined Analytics Section */}
       <div className="space-y-8">
-        {/* Daily Revenue Tracking */}
-        <DailyRevenueTracker data={generateDailyRevenueData()} />
-
-        {/* Analytics Charts Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          <MoMAnalyticsCharts data={generateMoMData()} />
-          <YoYComparisonCharts data={generateYoYData()} />
+        {/* Single Unified Sync Button */}
+        <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-100">Data Sync</h3>
+              <p className="text-sm text-gray-400">Last sync: {new Date().toLocaleTimeString()}</p>
+            </div>
+            <button
+              onClick={handleGlobalSync}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            >
+              Sync All Data
+            </button>
+          </div>
         </div>
 
-        {/* Enhanced AR Aging */}
+        {/* Daily Revenue Tracking - Keep this as primary daily widget */}
+        <DailyRevenueTracker data={generateDailyRevenueData()} />
+
+        {/* Year-over-Year Analysis - Keep only this chart (removed MoM duplicate) */}
+        <YoYComparisonCharts data={generateYoYData()} />
+
+        {/* Enhanced AR Aging - Primary Focus */}
         <EnhancedARAgingWidget data={generateEnhancedARData()} />
 
-        {/* Sync Status & Controls */}
-        <SyncStatusControls
-          sources={syncSources}
-          globalSyncStatus="idle"
-          lastGlobalSync={new Date().toISOString()}
-          autoSyncEnabled={true}
-          onToggleAutoSync={handleToggleAutoSync}
-          onManualSync={handleManualSync}
-          onGlobalSync={handleGlobalSync}
-          onConfigureSource={handleConfigureSource}
-        />
-
-        {/* OpenPhone Integration */}
+        {/* OpenPhone Integration - Keep this over CallAnalyticsWidget */}
         <OpenPhoneIntegration
           {...generateOpenPhoneData()}
           onConnect={handleOpenPhoneConnect}
           onConfigure={handleOpenPhoneConfigure}
           onViewDetails={handleOpenPhoneViewDetails}
         />
-      </div>
 
-      {/* Traditional Dashboard Sections */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-8 shadow-lg">
-        {/* Membership Overview */}
-        <div className="relative mb-8">
+        {/* Membership Program - Standalone widget */}
+        <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-8 shadow-xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-1 h-6 bg-gradient-to-b from-purple-600 to-pink-600 rounded-full"></div>
-            <h2 className="text-xl font-bold text-gray-900">Membership Program</h2>
-            <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent"></div>
+            <h2 className="text-xl font-bold text-gray-100">Membership Program</h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-gray-600 to-transparent"></div>
           </div>
           <MembershipCard membershipData={metrics.gmMetrics.membershipRevenue} />
-        </div>
-
-        {/* Call Intelligence */}
-        <div className="relative">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-6 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-full"></div>
-            <h2 className="text-xl font-bold text-gray-900">Call Intelligence</h2>
-            <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent"></div>
-          </div>
-          <CallAnalyticsWidget data={metrics.callAnalytics} />
         </div>
       </div>
     </div>

@@ -228,16 +228,94 @@ export class DashboardService {
 
   async getDaillyTargetProgress(): Promise<DashboardMetrics['dailyTarget']> {
     const supabase = await this.getSupabase();
-    const today = this.getTodayString();
 
-    // Get jobs completed TODAY only (archived = completed in Jobber)
-    const { data: todayJobs } = await supabase
-      .from('jobber_jobs')
-      .select('revenue, status, end_date')
-      .gte('end_date', today)
-      .lt('end_date', `${today}T23:59:59`)
-      .eq('status', 'archived')
-      .gt('revenue', 0);
+    // Get today's date range in Eastern Time
+    const now = new Date();
+    const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+
+    const startOfDay = new Date(easternNow);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(easternNow);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    console.log(`Eastern Time Range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+
+    // Get ACTUAL COLLECTED PAYMENTS TODAY for daily revenue (Eastern Time)
+    const easternToday = easternNow.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+
+    console.log(`=== DAILY REVENUE DEBUG (getDaillyTargetProgress) ===`);
+    console.log(`Eastern Now: ${easternNow.toISOString()}`);
+    console.log(`Eastern Today Date: ${easternToday}`);
+    console.log(`UTC Now: ${now.toISOString()}`);
+    console.log(`UTC Today Date: ${now.toISOString().split('T')[0]}`);
+
+    // First, get ALL payments to see what's in the database
+    const { data: allPayments } = await supabase
+      .from('jobber_payments')
+      .select('*')
+      .order('payment_date', { ascending: false })
+      .limit(20);
+
+    console.log(`\n=== ALL RECENT PAYMENTS (Last 20) ===`);
+    allPayments?.forEach((payment, index) => {
+      console.log(`${index + 1}. Payment ID: ${payment.payment_id}`);
+      console.log(`   Customer: ${payment.customer}`);
+      console.log(`   Amount: $${payment.amount}`);
+      console.log(`   Payment Date: ${payment.payment_date}`);
+      console.log(`   Invoice ID: ${payment.invoice_id || 'None'}`);
+      console.log(`   Method: ${payment.payment_method}`);
+      console.log(`   Created: ${payment.created_at_jobber || 'N/A'}`);
+      console.log(`   Pulled At: ${payment.pulled_at}`);
+      console.log('');
+    });
+
+    // Get payments using exact date match
+    const { data: todayPayments, error } = await supabase
+      .from('jobber_payments')
+      .select('*')  // Get all fields for debugging
+      .eq('payment_date', easternToday)  // Use exact date match since payment_date is stored as date string
+      .gt('amount', 0);
+
+    console.log(`\n=== TODAY'S PAYMENTS (Eastern Date: ${easternToday}) ===`);
+    console.log(`Found ${todayPayments?.length || 0} payments for exact date match`);
+    let totalAmount = 0;
+    todayPayments?.forEach((payment, index) => {
+      console.log(`${index + 1}. Payment ID: ${payment.payment_id}`);
+      console.log(`   Customer: ${payment.customer}`);
+      console.log(`   Amount: $${payment.amount}`);
+      console.log(`   Payment Date: ${payment.payment_date}`);
+      console.log(`   Invoice ID: ${payment.invoice_id || 'None'}`);
+      console.log(`   Method: ${payment.payment_method}`);
+      console.log(`   Created: ${payment.created_at_jobber || 'N/A'}`);
+      console.log(`   Pulled At: ${payment.pulled_at}`);
+      totalAmount += payment.amount || 0;
+      console.log('');
+    });
+    console.log(`TOTAL AMOUNT: $${totalAmount}`);
+
+    // Also try broader range query to see if there are timezone issues
+    const startOfEasternDay = new Date(easternNow);
+    startOfEasternDay.setHours(0, 0, 0, 0);
+    const endOfEasternDay = new Date(easternNow);
+    endOfEasternDay.setHours(23, 59, 59, 999);
+
+    const { data: rangePayments } = await supabase
+      .from('jobber_payments')
+      .select('*')
+      .gte('payment_date', startOfEasternDay.toISOString())
+      .lte('payment_date', endOfEasternDay.toISOString())
+      .gt('amount', 0);
+
+    console.log(`\n=== RANGE QUERY PAYMENTS (${startOfEasternDay.toISOString()} to ${endOfEasternDay.toISOString()}) ===`);
+    console.log(`Found ${rangePayments?.length || 0} payments in Eastern time range`);
+    rangePayments?.forEach((payment, index) => {
+      console.log(`${index + 1}. ${payment.customer}: $${payment.amount} on ${payment.payment_date}`);
+    });
+
+    if (error) {
+      console.log('Payment query error:', error);
+    }
 
     // Get daily target
     const { data: targets } = await supabase
@@ -247,7 +325,7 @@ export class DashboardService {
       .eq('period', 'daily')
       .single();
 
-    const current = todayJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+    const current = todayPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
     const target = targets?.target_value || 13000;
     const percentage = (current / target) * 100;
 
@@ -299,12 +377,15 @@ export class DashboardService {
   async getBookedCallPercentage(): Promise<DashboardMetrics['bookedCallPercentage']> {
     const supabase = await this.getSupabase();
     const today = this.getTodayString();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toISOString().split('T')[0];
 
     const { data: calls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked')
       .gte('call_date', today)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .lt('call_date', tomorrowString);
 
     const total = calls?.length || 0;
     const booked = calls?.filter(call => call.classified_as_booked).length || 0;
@@ -327,18 +408,22 @@ export class DashboardService {
     const lastWeekEnd = new Date(weekStartDate.getTime() - 1);
 
     // Get today's calls using existing schema fields
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toISOString().split('T')[0];
+
     const { data: todayCalls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked, classification_confidence, transcript, duration, caller_number')
       .gte('call_date', today)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .lt('call_date', tomorrowString);
 
     // Get this week's calls
     const { data: thisWeekCalls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked, classification_confidence, transcript, duration, caller_number')
-      .gte('call_date', weekStart)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .gte('call_date', weekStart.split('T')[0])
+      .lt('call_date', tomorrowString);
 
     // Get last week's calls for comparison
     const { data: lastWeekCalls } = await supabase
@@ -449,31 +534,37 @@ export class DashboardService {
       .eq('status', 'archived')
       .gt('revenue', 0);
 
-    // Get invoice data for month-over-month calculations
+    // Get invoice data for month-over-month calculations (only valid invoices)
     const { data: currentMonthInvoices } = await supabase
       .from('jobber_invoices')
-      .select('amount, issue_date')
+      .select('amount, issue_date, status')
       .gte('issue_date', startOfMonth.toISOString().split('T')[0])
-      .lt('issue_date', startOfNextMonth.toISOString().split('T')[0]);
+      .lt('issue_date', startOfNextMonth.toISOString().split('T')[0])
+      .in('status', ['issued', 'sent', 'completed', 'paid', 'overdue'])
+      .gt('amount', 0);
 
     const { data: lastMonthInvoices } = await supabase
       .from('jobber_invoices')
-      .select('amount, issue_date')
+      .select('amount, issue_date, status')
       .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
-      .lt('issue_date', startOfMonth.toISOString().split('T')[0]);
+      .lt('issue_date', startOfMonth.toISOString().split('T')[0])
+      .in('status', ['issued', 'sent', 'completed', 'paid', 'overdue'])
+      .gt('amount', 0);
 
     // Get payment data for month-over-month calculations
     const { data: currentMonthPayments } = await supabase
       .from('jobber_payments')
       .select('amount, payment_date')
       .gte('payment_date', startOfMonth.toISOString().split('T')[0])
-      .lt('payment_date', startOfNextMonth.toISOString().split('T')[0]);
+      .lt('payment_date', startOfNextMonth.toISOString().split('T')[0])
+      .gt('amount', 0);
 
     const { data: lastMonthPayments } = await supabase
       .from('jobber_payments')
       .select('amount, payment_date')
       .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
-      .lt('payment_date', startOfMonth.toISOString().split('T')[0]);
+      .lt('payment_date', startOfMonth.toISOString().split('T')[0])
+      .gt('amount', 0);
 
     const revenueIssuedMTD = currentMonthInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
     const revenueIssuedLastMonth = lastMonthInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
@@ -496,61 +587,62 @@ export class DashboardService {
     }
     const revenueCollectedLastMonth = lastMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
 
-    // Get jobs CLOSED TODAY for daily revenue (using system date for consistency with test data)
+    // Get INVOICES ISSUED TODAY for daily revenue (to match Jobber's Transaction List logic)
     const actualToday = new Date().toISOString().split('T')[0]; // Use system date to match test data
 
-    const { data: todayClosedJobs } = await supabase
-      .from('jobber_jobs')
-      .select('revenue, status, end_date, job_number, title, client_name')
-      .gte('end_date', `${actualToday}T00:00:00`)  // Jobs with work completed today
-      .lt('end_date', `${actualToday}T23:59:59`)   // Up to end of today
-      .eq('status', 'archived')  // "Closed" status in Jobber
-      .gt('revenue', 0);
+    const { data: todayIssuedInvoices } = await supabase
+      .from('jobber_invoices')
+      .select('amount, status, issue_date, invoice_number, client_name')
+      .eq('issue_date', actualToday)  // Use exact date match instead of datetime range
+      .in('status', ['issued', 'sent', 'completed', 'paid', 'overdue'])  // Valid invoice statuses
+      .gt('amount', 0);
 
-    // Try to get real-time data from Jobber API first
-    let dailyClosedRevenue = 0;
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobber/jobs-closed-today`, {
-        signal: AbortSignal.timeout(5000) // 5 second timeout
-      });
-      if (response.ok) {
-        const jobsData = await response.json();
-        dailyClosedRevenue = jobsData.totalRevenue || 0;
-      } else {
-        // Fallback to local database
-        dailyClosedRevenue = todayClosedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
-      }
-    } catch (error) {
-      // Fallback to local database
-      dailyClosedRevenue = todayClosedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
-    }
+    // Calculate daily revenue from PAYMENTS COLLECTED TODAY (Eastern Time)
+    const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const easternToday = easternNow.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+
+    const { data: todayPayments } = await supabase
+      .from('jobber_payments')
+      .select('amount, payment_date, customer, payment_method')
+      .eq('payment_date', easternToday)  // Use exact date match since payment_date is stored as date string
+      .gt('amount', 0);
+
+    const dailyCollectedRevenue = todayPayments?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+
+    console.log(`Daily Revenue Debug (Executive): Found ${todayPayments?.length || 0} payments collected today (Eastern Time: ${easternToday}) totaling $${dailyCollectedRevenue}`);
+    console.log('Executive Payments Details:', todayPayments);
     const dailyGoal = 13000; // Updated to correct $13K goal
 
     const arOutstanding = outstandingInvoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
-    // Calculate AR aging buckets
+    // Calculate AR aging buckets based on due_date (to match Jobber's Aged Receivables report)
     const current = outstandingInvoices?.filter(inv => {
-      const daysPastDue = Math.floor((now.getTime() - new Date(inv.issue_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (!inv.due_date) return true; // Invoices without due dates are considered current
+      const daysPastDue = Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
       return daysPastDue <= 0;
     }).reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
     const days1to30 = outstandingInvoices?.filter(inv => {
-      const daysPastDue = Math.floor((now.getTime() - new Date(inv.issue_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (!inv.due_date) return false;
+      const daysPastDue = Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
       return daysPastDue > 0 && daysPastDue <= 30;
     }).reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
     const days31to60 = outstandingInvoices?.filter(inv => {
-      const daysPastDue = Math.floor((now.getTime() - new Date(inv.issue_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (!inv.due_date) return false;
+      const daysPastDue = Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
       return daysPastDue > 30 && daysPastDue <= 60;
     }).reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
     const days61to90 = outstandingInvoices?.filter(inv => {
-      const daysPastDue = Math.floor((now.getTime() - new Date(inv.issue_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (!inv.due_date) return false;
+      const daysPastDue = Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
       return daysPastDue > 60 && daysPastDue <= 90;
     }).reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
     const days90plus = outstandingInvoices?.filter(inv => {
-      const daysPastDue = Math.floor((now.getTime() - new Date(inv.issue_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (!inv.due_date) return false;
+      const daysPastDue = Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
       return daysPastDue > 90;
     }).reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
 
@@ -590,7 +682,7 @@ export class DashboardService {
     // Status calculations
     const completionStatus = completionRate30d >= 90 ? 'green' : completionRate30d >= 75 ? 'orange' : 'red';
     const jobsPerTechStatus = avgJobsPerTechDay >= 2.0 ? 'green' : avgJobsPerTechDay >= 1.5 ? 'orange' : 'red';
-    const dailyRevenueStatus = dailyClosedRevenue >= 12500 ? 'green' : dailyClosedRevenue >= 10000 ? 'orange' : 'red';
+    const dailyRevenueStatus = dailyCollectedRevenue >= 12500 ? 'green' : dailyCollectedRevenue >= 10000 ? 'orange' : 'red';
     const arStatus = over60Percent <= 15 ? 'green' : over60Percent <= 30 ? 'orange' : 'red';
     const momStatus = issuedChange > 0 && paidChange > 0 ? 'green' :
                      (issuedChange > 0 || paidChange > 0) ? 'orange' : 'red';
@@ -612,9 +704,9 @@ export class DashboardService {
       },
       revenue: {
         dailyClosedRevenue: {
-          amount: dailyClosedRevenue,
+          amount: dailyCollectedRevenue,
           goal: dailyGoal,
-          percentage: Math.round((dailyClosedRevenue / dailyGoal) * 100),
+          percentage: Math.round((dailyCollectedRevenue / dailyGoal) * 100),
           status: dailyRevenueStatus,
         },
         revenueIssuedMTD: {

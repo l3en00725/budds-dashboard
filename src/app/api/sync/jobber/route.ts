@@ -229,8 +229,8 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
   let cursor = null;
 
   const query = `
-    query GetJobs($first: Int, $after: String, $createdAtGte: DateTime) {
-      jobs(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetJobs($first: Int, $after: String, $updatedAtGte: DateTime) {
+      jobs(first: $first, after: $after, filter: { updatedAtGte: $updatedAtGte }) {
         nodes {
           id
           jobNumber
@@ -274,10 +274,10 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
     }
 
     // Set historical date to September 1st, 2025 for accurate financial data
-    // This ensures we capture all relevant business data from the fiscal period start
+    // Use updatedAtGte to capture all jobs that have been modified since our target date
     const historicalDate = '2025-09-01T00:00:00Z';
-    console.log(`Syncing jobs from ${historicalDate} to present...`);
-    const data = await makeJobberRequest(query, { first: 15, after: cursor, createdAtGte: historicalDate }, request);
+    console.log(`Syncing jobs updated since ${historicalDate}...`);
+    const data = await makeJobberRequest(query, { first: 15, after: cursor, updatedAtGte: historicalDate }, request);
     const jobs = data.jobs.nodes;
 
     console.log(`Processing ${jobs.length} jobs (batch ${Math.floor(recordsSynced / 15) + 1})...`);
@@ -296,19 +296,31 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
         }
 
         // Store job data with improved validation
+        // Only include jobs that are completed, archived, or invoiced (per Jobber Transaction List logic)
+        const jobStatus = job.jobStatus || 'unknown';
+        const isCompleted = ['complete', 'archived', 'invoiced'].includes(jobStatus.toLowerCase());
+        const revenue = Math.max(0, job.total || 0);
+
+        // Skip jobs that are open, in-progress, or have no revenue (to match Jobber reports)
+        if (!isCompleted || revenue <= 0) {
+          console.log(`Skipping job ${job.id} - Status: ${jobStatus}, Revenue: ${revenue}`);
+          continue;
+        }
+
         const jobData = {
           job_id: job.id,
           job_number: job.jobNumber || null,
           title: job.title || 'Untitled Job',
           description: null, // Field not available in API
-          status: job.jobStatus || 'unknown',
-          invoiced: job.jobStatus === 'complete' || job.jobStatus === 'archived',
-          revenue: Math.max(0, job.total || 0), // Ensure non-negative revenue
+          status: jobStatus,
+          invoiced: isCompleted,
+          revenue: revenue,
           client_id: job.client?.id || null,
           client_name: `${job.client?.firstName || ''} ${job.client?.lastName || ''}`.trim() || job.client?.companyName || 'Unknown Client',
           start_date: job.startAt || null,
           end_date: job.endAt || null,
           created_at_jobber: job.createdAt,
+          updated_at_jobber: job.updatedAt,
           pulled_at: new Date().toISOString(),
         };
 
@@ -440,14 +452,25 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
           continue;
         }
 
+        // Only include invoices that are completed or issued (per Jobber Transaction List logic)
+        const invoiceStatus = invoice.invoiceStatus || 'unknown';
+        const isValidInvoice = ['completed', 'issued', 'sent', 'paid', 'overdue'].includes(invoiceStatus.toLowerCase());
+        const amount = Math.max(0, invoice.total || 0);
+
+        // Skip draft or cancelled invoices (to match Jobber reports)
+        if (!isValidInvoice || amount <= 0) {
+          console.log(`Skipping invoice ${invoice.id} - Status: ${invoiceStatus}, Amount: ${amount}`);
+          continue;
+        }
+
         const invoiceData = {
           invoice_id: invoice.id,
           invoice_number: invoice.invoiceNumber || null,
           client_id: invoice.client?.id || null,
           client_name: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() || invoice.client?.companyName || 'Unknown Client',
           job_id: invoice.job?.id || null,
-          status: invoice.invoiceStatus || 'unknown',
-          amount: Math.max(0, invoice.total || 0),
+          status: invoiceStatus,
+          amount: amount,
           balance: Math.max(0, invoice.outstandingAmount || 0),
           issue_date: invoice.issueDate || null,
           due_date: invoice.dueDate || null,
@@ -480,8 +503,8 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
   let cursor = null;
 
   const query = `
-    query GetPayments($first: Int, $after: String, $createdAtGte: DateTime) {
-      payments(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetPayments($first: Int, $after: String, $updatedAtGte: DateTime) {
+      payments(first: $first, after: $after, filter: { updatedAtGte: $updatedAtGte }) {
         nodes {
           id
           amount
@@ -508,10 +531,10 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
 
   while (hasNextPage) {
     // Set historical date to September 1st, 2025 for accurate financial data
-    // This ensures we capture all payments from the relevant business period
+    // Use updatedAtGte to capture all payments that have been modified since our target date
     const historicalDate = '2025-09-01T00:00:00Z';
-    console.log(`Syncing payments created since ${historicalDate}...`);
-    const data = await makeJobberRequest(query, { first: 50, after: cursor, createdAtGte: historicalDate }, request);
+    console.log(`Syncing payments updated since ${historicalDate}...`);
+    const data = await makeJobberRequest(query, { first: 50, after: cursor, updatedAtGte: historicalDate }, request);
     const payments = data.payments.nodes;
 
     for (const payment of payments) {

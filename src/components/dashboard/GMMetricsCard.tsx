@@ -36,75 +36,75 @@ export function GMMetricsCard({ data }: GMMetricsCardProps) {
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {/* Monthly Recurring Revenue */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600">Monthly Membership Revenue</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(data.membershipRevenue.monthly)}</p>
-            <p className="text-sm text-green-600">+{data.membershipRevenue.growth}% growth</p>
+            <p className="text-sm font-medium text-gray-400">Monthly Membership Revenue</p>
+            <p className="text-2xl font-bold text-gray-100">{formatCurrency(data.membershipRevenue.monthly)}</p>
+            <p className="text-sm text-emerald-400">+{data.membershipRevenue.growth}% growth</p>
           </div>
           <CreditCard className="h-8 w-8 text-blue-500" />
         </div>
-        <div className="mt-4 space-y-2 text-sm text-gray-600">
+        <div className="mt-4 space-y-2 text-sm text-gray-400">
           <div className="flex justify-between">
             <span>Silver Members:</span>
-            <span className="font-medium">{data.membershipRevenue.silverCount}</span>
+            <span className="font-medium text-gray-200">{data.membershipRevenue.silverCount}</span>
           </div>
           <div className="flex justify-between">
             <span>Platinum Members:</span>
-            <span className="font-medium">{data.membershipRevenue.platinumCount}</span>
+            <span className="font-medium text-gray-200">{data.membershipRevenue.platinumCount}</span>
           </div>
         </div>
       </div>
 
       {/* Job Pipeline Value */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600">Revenue Pipeline</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(data.jobPipeline.totalValue)}</p>
-            <p className="text-sm text-blue-600">Across all projects</p>
+            <p className="text-sm font-medium text-gray-400">Revenue Pipeline</p>
+            <p className="text-2xl font-bold text-gray-100">{formatCurrency(data.jobPipeline.totalValue)}</p>
+            <p className="text-sm text-blue-400">Across all projects</p>
           </div>
           <TrendingUp className="h-8 w-8 text-green-500" />
         </div>
-        <div className="mt-4 space-y-2 text-sm text-gray-600">
+        <div className="mt-4 space-y-2 text-sm text-gray-400">
           <div className="flex justify-between">
             <span>Large Projects ($10K+):</span>
-            <span className="font-medium">{data.jobPipeline.largeProjects}</span>
+            <span className="font-medium text-gray-200">{data.jobPipeline.largeProjects}</span>
           </div>
           <div className="flex justify-between">
             <span>Service Tickets:</span>
-            <span className="font-medium">{data.jobPipeline.serviceTickets}</span>
+            <span className="font-medium text-gray-200">{data.jobPipeline.serviceTickets}</span>
           </div>
           <div className="flex justify-between">
             <span>Avg Job Value:</span>
-            <span className="font-medium">{formatCurrency(data.jobPipeline.averageValue)}</span>
+            <span className="font-medium text-gray-200">{formatCurrency(data.jobPipeline.averageValue)}</span>
           </div>
         </div>
       </div>
 
       {/* Business Health Metrics */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600">Business Health</p>
-            <p className="text-2xl font-bold text-gray-900">{formatPercent(data.businessHealth.profitMargin)}</p>
-            <p className="text-sm text-green-600">Profit margin</p>
+            <p className="text-sm font-medium text-gray-400">Business Health</p>
+            <p className="text-2xl font-bold text-gray-100">{formatPercent(data.businessHealth.profitMargin)}</p>
+            <p className="text-sm text-emerald-400">Profit margin</p>
           </div>
           <Activity className="h-8 w-8 text-purple-500" />
         </div>
-        <div className="mt-4 space-y-2 text-sm text-gray-600">
+        <div className="mt-4 space-y-2 text-sm text-gray-400">
           <div className="flex justify-between">
             <span>Repeat Customers:</span>
-            <span className="font-medium">{formatPercent(data.businessHealth.repeatCustomers)}</span>
+            <span className="font-medium text-gray-200">{formatPercent(data.businessHealth.repeatCustomers)}</span>
           </div>
           <div className="flex justify-between">
             <span>Service→Project Rate:</span>
-            <span className="font-medium">{formatPercent(data.businessHealth.conversionRate)}</span>
+            <span className="font-medium text-gray-200">{formatPercent(data.businessHealth.conversionRate)}</span>
           </div>
           <div className="flex justify-between">
             <span>Emergency Work:</span>
-            <span className="font-medium">{formatPercent(data.businessHealth.emergencyRatio)}</span>
+            <span className="font-medium text-gray-200">{formatPercent(data.businessHealth.emergencyRatio)}</span>
           </div>
         </div>
       </div>

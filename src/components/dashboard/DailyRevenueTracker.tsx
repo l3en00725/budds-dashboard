@@ -17,7 +17,7 @@ interface DailyRevenueData {
 }
 
 interface RevenueSource {
-  source: 'Jobber' | 'QuickBooks';
+  source: 'Jobber';
   amount: number;
   percentage: number;
   lastSync: string;
@@ -148,7 +148,7 @@ export function DailyRevenueTracker({ data }: DailyRevenueTrackerProps) {
   const remaining = Math.max(0, todayData.target - todayData.current);
 
   return (
-    <div className="bg-gray-800/40 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
+    <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/20 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-6 shadow-xl">
       {/* Header with Real-time Indicator */}
       <div className="flex items-center justify-between mb-6">
         <div>
