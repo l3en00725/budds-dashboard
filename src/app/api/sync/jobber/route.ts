@@ -15,7 +15,7 @@ const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber
 async function syncJobberHandler(request: NextRequest) {
   const supabase = createServiceRoleClient();
   let totalRecordsSynced = 0;
-  let syncLog: any = null;
+  let syncLog: { id: string } | null = null;
 
   try {
     // Log sync start
@@ -175,7 +175,7 @@ async function refreshJobberToken(refreshToken: string): Promise<string | null> 
   }
 }
 
-async function makeJobberRequest(query: string, variables: any = {}, request: NextRequest, retryCount = 0) {
+async function makeJobberRequest(query: string, variables: Record<string, unknown> = {}, request: NextRequest, retryCount = 0) {
   const token = await getJobberToken(request);
   if (!token) {
     throw new AuthenticationError('No Jobber token available for API request', {
@@ -229,13 +229,13 @@ async function makeJobberRequest(query: string, variables: any = {}, request: Ne
   const data = await response.json();
   if (data.errors) {
     // Check for rate limiting and retry with exponential backoff
-    const isThrottled = data.errors.some((error: any) =>
+    const isThrottled = data.errors.some((error: { extensions?: { code?: string }; message?: string }) =>
       error.extensions?.code === 'THROTTLED' ||
       error.message?.toLowerCase().includes('rate') ||
       error.message?.toLowerCase().includes('throttle')
     );
 
-    const isAuthError = data.errors.some((error: any) =>
+    const isAuthError = data.errors.some((error: { extensions?: { code?: string }; message?: string }) =>
       error.extensions?.code === 'UNAUTHENTICATED' ||
       error.message?.toLowerCase().includes('authentication') ||
       error.message?.toLowerCase().includes('unauthorized')
@@ -392,70 +392,6 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
   return recordsSynced;
 }
 
-async function syncJobberQuotes(request: NextRequest): Promise<number> {
-  const supabase = createServiceRoleClient();
-  let recordsSynced = 0;
-  let hasNextPage = true;
-  let cursor = null;
-
-  const query = `
-    query GetQuotes($first: Int, $after: String) {
-      quotes(first: $first, after: $after) {
-        nodes {
-          id
-          quoteNumber
-          quoteStatus
-          total
-          createdAt
-          expiresAt
-          client {
-            id
-            firstName
-            lastName
-            companyName
-            emails {
-              address
-            }
-            phoneNumbers {
-              number
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-  `;
-
-  while (hasNextPage) {
-    const data = await makeJobberRequest(query, { first: 50, after: cursor }, request);
-    const quotes = data.quotes.nodes;
-
-    for (const quote of quotes) {
-      await supabase.from('jobber_quotes').upsert({
-        quote_id: quote.id,
-        quote_number: quote.quoteNumber,
-        client_id: quote.client?.id,
-        client_name: `${quote.client?.firstName || ''} ${quote.client?.lastName || ''}`.trim() || quote.client?.companyName,
-        client_email: quote.client?.emails?.[0]?.address,
-        client_phone: quote.client?.phoneNumbers?.[0]?.number,
-        status: quote.quoteStatus,
-        amount: quote.total || 0,
-        created_at_jobber: quote.createdAt,
-        expires_at: quote.expiresAt,
-        pulled_at: new Date().toISOString(),
-      });
-      recordsSynced++;
-    }
-
-    hasNextPage = data.quotes.pageInfo.hasNextPage;
-    cursor = data.quotes.pageInfo.endCursor;
-  }
-
-  return recordsSynced;
-}
 
 async function syncJobberInvoices(request: NextRequest): Promise<number> {
   const supabase = createServiceRoleClient();
