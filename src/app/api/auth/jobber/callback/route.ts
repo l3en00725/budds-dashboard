@@ -42,12 +42,17 @@ export async function GET(request: NextRequest) {
 
   // Validate state against the stored cookie
   const storedState = request.cookies.get('jobber_oauth_state')?.value;
+
+  console.log('OAuth state validation debug:', {
+    receivedState: state?.substring(0, 8) + '...',
+    storedState: storedState?.substring(0, 8) + '...',
+    hasStoredState: !!storedState,
+    statesMatch: storedState === state,
+    allCookies: Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value?.substring(0, 8) + '...']))
+  });
+
   if (!storedState || storedState !== state) {
-    console.error('CSRF state validation failed:', {
-      receivedState: state?.substring(0, 8) + '...',
-      hasStoredState: !!storedState,
-      statesMatch: storedState === state
-    });
+    console.error('CSRF state validation failed');
     return NextResponse.json(
       {
         error: 'Invalid state parameter - CSRF protection failed',

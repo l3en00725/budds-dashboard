@@ -35,6 +35,7 @@ export async function GET() {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 600, // 10 minutes
+    path: '/',
   });
 
   return response;
