@@ -4,9 +4,8 @@ import { cookies } from 'next/headers';
 export default async function Home() {
   const cookieStore = await cookies();
   const hasJobberToken = cookieStore.get('jobber_access_token');
-  const hasQuickBooksToken = cookieStore.get('quickbooks_access_token');
 
-  if (hasJobberToken && hasQuickBooksToken) {
+  if (hasJobberToken) {
     redirect('/dashboard');
   }
 
@@ -31,30 +30,14 @@ export default async function Home() {
               </a>
             )}
 
-            {hasJobberToken && !hasQuickBooksToken && (
-              <a
-                href="/api/auth/quickbooks"
-                className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center"
-              >
-                Connect to QuickBooks
-              </a>
-            )}
-
             {hasJobberToken && (
-              <div className="flex items-center space-x-2 text-sm text-green-600">
+              <div className="flex items-center space-x-2 text-sm text-green-600 mb-4">
                 <span>✓</span>
                 <span>Jobber Connected</span>
               </div>
             )}
 
-            {hasQuickBooksToken && (
-              <div className="flex items-center space-x-2 text-sm text-green-600">
-                <span>✓</span>
-                <span>QuickBooks Connected</span>
-              </div>
-            )}
-
-            {hasJobberToken && hasQuickBooksToken && (
+            {hasJobberToken && (
               <a
                 href="/dashboard"
                 className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center justify-center"
@@ -64,9 +47,8 @@ export default async function Home() {
             )}
 
             <div className="text-sm text-gray-500">
-              {!hasJobberToken && "Connect your accounts to start tracking business metrics"}
-              {hasJobberToken && !hasQuickBooksToken && "Connect QuickBooks for revenue tracking"}
-              {hasJobberToken && hasQuickBooksToken && "All systems connected!"}
+              {!hasJobberToken && "Connect your Jobber account to start tracking business metrics"}
+              {hasJobberToken && "All set! Access your business dashboard"}
             </div>
           </div>
 
