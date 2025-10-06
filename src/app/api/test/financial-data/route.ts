@@ -5,15 +5,15 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServiceRoleClient();
 
-    // Clear existing financial data
-    await supabase.from('jobber_invoices').delete().neq('id', '');
-    await supabase.from('jobber_payments').delete().neq('id', '');
+    // Clear existing test financial data only
+    await supabase.from('jobber_invoices').delete().like('invoice_id', 'test_%');
+    await supabase.from('jobber_payments').delete().like('payment_id', 'test_%');
 
     // Create test invoices for today that total $11,474.76
     const today = new Date().toISOString().split('T')[0];
     const invoices = [
       {
-        invoice_id: 'test_inv_001',
+        invoice_id: 'test_oct_inv_001',
         invoice_number: '2025-001',
         amount: 5474.76,
         balance: 5474.76,
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         pulled_at: new Date().toISOString()
       },
       {
-        invoice_id: 'test_inv_002',
+        invoice_id: 'test_oct_inv_002',
         invoice_number: '2025-002',
         amount: 6000.00,
         balance: 6000.00,
@@ -38,26 +38,52 @@ export async function POST(request: NextRequest) {
       }
     ];
 
-    // Create test payments for today that total $1,827.31
+    // Create test payments for October MTD (should total more than just today)
+    const octStartDate = '2025-10-01';
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
     const payments = [
+      // October MTD payments - total should be around $45,000
       {
-        payment_id: 'test_pay_001',
-        amount: 827.31,
-        payment_date: today,
-        payment_method: 'credit_card',
-        status: 'completed',
-        invoice_id: 'test_inv_003',
-        invoice_number: '2025-003',
+        payment_id: 'test_oct_mtd_001',
+        amount: 15000.00,
+        payment_date: octStartDate,
+        payment_method: 'ach',
+        customer: 'Major Commercial Client',
         pulled_at: new Date().toISOString()
       },
       {
-        payment_id: 'test_pay_002',
+        payment_id: 'test_oct_mtd_002',
+        amount: 8500.00,
+        payment_date: '2025-10-02',
+        payment_method: 'check',
+        customer: 'Residential Customer',
+        pulled_at: new Date().toISOString()
+      },
+      {
+        payment_id: 'test_oct_mtd_003',
+        amount: 12750.00,
+        payment_date: '2025-10-03',
+        payment_method: 'credit_card',
+        customer: 'Emergency Service Call',
+        pulled_at: new Date().toISOString()
+      },
+      {
+        payment_id: 'test_oct_pay_001',
+        amount: 827.31,
+        payment_date: today,
+        payment_method: 'credit_card',
+        invoice_id: 'test_inv_003',
+        pulled_at: new Date().toISOString()
+      },
+      {
+        payment_id: 'test_oct_pay_002',
         amount: 1000.00,
         payment_date: today,
         payment_method: 'check',
-        status: 'completed',
         invoice_id: 'test_inv_004',
-        invoice_number: '2025-004',
         pulled_at: new Date().toISOString()
       }
     ];
@@ -102,6 +128,46 @@ export async function POST(request: NextRequest) {
       }
     ];
 
+    // Create test jobs completed today for daily revenue
+    const jobsCompletedToday = [
+      {
+        job_id: 'test_job_today_001',
+        job_number: '2025-OCT-001',
+        title: 'Emergency Plumbing Repair',
+        status: 'archived', // Completed status in Jobber
+        revenue: 2500.00,
+        client_name: 'Johnson Family',
+        end_date: `${today}T14:30:00`,
+        start_date: `${today}T09:00:00`,
+        created_at_jobber: `${today}T08:00:00`,
+        pulled_at: new Date().toISOString()
+      },
+      {
+        job_id: 'test_job_today_002',
+        job_number: '2025-OCT-002',
+        title: 'HVAC Maintenance Call',
+        status: 'archived',
+        revenue: 1850.00,
+        client_name: 'Smith Commercial Building',
+        end_date: `${today}T16:15:00`,
+        start_date: `${today}T13:00:00`,
+        created_at_jobber: `${today}T12:30:00`,
+        pulled_at: new Date().toISOString()
+      },
+      {
+        job_id: 'test_job_today_003',
+        job_number: '2025-OCT-003',
+        title: 'Water Heater Installation',
+        status: 'archived',
+        revenue: 3200.00,
+        client_name: 'Davis Residence',
+        end_date: `${today}T17:45:00`,
+        start_date: `${today}T14:00:00`,
+        created_at_jobber: `${today}T13:45:00`,
+        pulled_at: new Date().toISOString()
+      }
+    ];
+
     // Insert all test data
     const allInvoices = [...invoices, ...arInvoices];
 
@@ -123,16 +189,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Clear existing test jobs
+    await supabase.from('jobber_jobs').delete().like('job_id', 'test_job_%');
+
+    console.log('Inserting jobs completed today:', jobsCompletedToday.length);
+    for (const job of jobsCompletedToday) {
+      const result = await supabase.from('jobber_jobs').insert(job);
+      if (result.error) {
+        console.error('Job insert error:', result.error);
+        throw new Error(`Job insert failed: ${result.error.message}`);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Test financial data created successfully',
       data: {
         invoicesCreated: allInvoices.length,
         paymentsCreated: payments.length,
+        jobsCreated: jobsCompletedToday.length,
         totals: {
           invoicedToday: invoices.reduce((sum, inv) => sum + inv.amount, 0),
-          paidToday: payments.reduce((sum, pay) => sum + pay.amount, 0),
-          arOutstanding: arInvoices.reduce((sum, inv) => sum + inv.balance, 0)
+          paidOctoberMTD: payments.reduce((sum, pay) => sum + pay.amount, 0),
+          arOutstanding: arInvoices.reduce((sum, inv) => sum + inv.balance, 0),
+          jobsCompletedToday: jobsCompletedToday.reduce((sum, job) => sum + job.revenue, 0)
         }
       }
     });

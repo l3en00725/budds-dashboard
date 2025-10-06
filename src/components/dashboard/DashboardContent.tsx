@@ -1,16 +1,56 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DashboardService, DashboardMetrics } from '@/lib/dashboard-service';
+import { DashboardMetrics } from '@/lib/dashboard-service';
 import MembershipCard from './MembershipCard';
 import { CallAnalyticsWidget } from './CallAnalyticsWidget';
 import { ExecutiveDashboard } from './ExecutiveDashboard';
+import { MoMAnalyticsCharts } from './MoMAnalyticsCharts';
+import { YoYComparisonCharts } from './YoYComparisonCharts';
+import { EnhancedARAgingWidget } from './EnhancedARAgingWidget';
+import { DailyRevenueTracker } from './DailyRevenueTracker';
+import { SyncStatusControls } from './SyncStatusControls';
+import { OpenPhoneIntegration } from './OpenPhoneIntegration';
 
 export function DashboardContent() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [syncSources, setSyncSources] = useState([
+    {
+      id: 'jobber',
+      name: 'Jobber' as const,
+      status: 'connected' as const,
+      lastSync: new Date().toISOString(),
+      lastSuccessfulSync: new Date().toISOString(),
+      recordCount: 1250,
+      canManualSync: true,
+      autoSyncEnabled: true,
+      syncDuration: 45
+    },
+    {
+      id: 'quickbooks',
+      name: 'QuickBooks' as const,
+      status: 'connected' as const,
+      lastSync: new Date().toISOString(),
+      lastSuccessfulSync: new Date().toISOString(),
+      recordCount: 890,
+      canManualSync: true,
+      autoSyncEnabled: true,
+      syncDuration: 32
+    },
+    {
+      id: 'openphone',
+      name: 'OpenPhone' as const,
+      status: 'connected' as const,
+      lastSync: new Date().toISOString(),
+      lastSuccessfulSync: new Date().toISOString(),
+      recordCount: 345,
+      canManualSync: true,
+      autoSyncEnabled: true,
+      syncDuration: 18
+    }
+  ]);
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -42,129 +82,7 @@ export function DashboardContent() {
     return () => clearInterval(interval);
   }, []);
 
-  const syncJobberData = async () => {
-    setSyncing(true);
-    try {
-      // Get token from cookie
-      const getCookie = (name: string) => {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop()?.split(';').shift();
-        return null;
-      };
 
-      let token = getCookie('jobber_access_token');
-      if (!token) {
-        // Try to refresh token automatically before prompting user
-        try {
-          console.log('No access token found, attempting automatic refresh...');
-          const refreshResponse = await fetch('/api/auth/jobber/refresh', {
-            method: 'POST',
-            credentials: 'include'
-          });
-
-          if (refreshResponse.ok) {
-            console.log('Token refreshed successfully, retrying sync...');
-            // Get the new token from the updated cookie
-            token = getCookie('jobber_access_token');
-          }
-        } catch (refreshError) {
-          console.error('Token refresh failed:', refreshError);
-        }
-
-        // If still no token after refresh attempt, prompt for re-authentication
-        if (!token) {
-          const shouldReauth = confirm('Jobber authentication required. Click OK to re-authenticate with Jobber now.');
-          if (shouldReauth) {
-            window.location.href = '/api/auth/jobber';
-            return;
-          } else {
-            throw new Error('Authentication cancelled');
-          }
-        }
-      }
-
-      const response = await fetch('/api/sync/jobber-financial', {
-        method: 'POST',
-        credentials: 'include', // Include cookies for authentication
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-
-        // Check if it's an authentication error
-        if (response.status === 401 || errorData.details?.includes('authentication') || errorData.details?.includes('token')) {
-          // Try to refresh token one more time before giving up
-          try {
-            console.log('Authentication error during sync, attempting token refresh...');
-            const refreshResponse = await fetch('/api/auth/jobber/refresh', {
-              method: 'POST',
-              credentials: 'include'
-            });
-
-            if (refreshResponse.ok) {
-              console.log('Token refreshed, retrying sync operation...');
-              // Get the new token and retry the sync
-              const newToken = getCookie('jobber_access_token');
-              if (newToken) {
-                // Retry the sync with the new token
-                const retryResponse = await fetch('/api/sync/jobber-financial', {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${newToken}`,
-                  },
-                });
-
-                if (retryResponse.ok) {
-                  const retryResult = await retryResponse.json();
-                  console.log('Sync successful after token refresh:', retryResult);
-                  alert(`Sync completed successfully! Synced ${retryResult.recordsSynced} records.`);
-                  fetchMetrics(); // Refresh the dashboard
-                  return;
-                }
-              }
-            }
-          } catch (retryError) {
-            console.error('Token refresh and retry failed:', retryError);
-          }
-
-          // If token refresh failed or retry failed, prompt for re-authentication
-          const shouldReauth = confirm('Your Jobber session has expired. Click OK to re-authenticate with Jobber now.');
-          if (shouldReauth) {
-            window.location.href = '/api/auth/jobber';
-            return;
-          } else {
-            throw new Error('Authentication cancelled');
-          }
-        }
-
-        throw new Error(errorData.details || 'Sync failed');
-      }
-
-      const result = await response.json();
-      console.log('Sync successful:', result);
-
-      // Refresh metrics after sync
-      const metricsResponse = await fetch('/api/dashboard/metrics');
-      if (metricsResponse.ok) {
-        const data = await metricsResponse.json();
-        setMetrics(data);
-      }
-    } catch (err) {
-      console.error('Sync error:', err);
-      if (err instanceof Error && err.message !== 'Authentication cancelled') {
-        alert(`Sync failed: ${err.message}`);
-      }
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -189,34 +107,279 @@ export function DashboardContent() {
     return null;
   }
 
+  // Mock data generators for new components
+  const generateMoMData = () => ({
+    currentMonth: {
+      issued: metrics.executiveMetrics.revenue.revenueIssuedMTD.amount,
+      collected: metrics.executiveMetrics.revenue.revenueCollectedMTD.amount,
+      issuedChange: metrics.executiveMetrics.revenue.issuedVsPaidMoM.issuedChange,
+      collectedChange: metrics.executiveMetrics.revenue.issuedVsPaidMoM.paidChange,
+      status: metrics.executiveMetrics.revenue.issuedVsPaidMoM.status
+    },
+    historicalData: Array.from({ length: 6 }, (_, i) => {
+      const month = new Date();
+      month.setMonth(month.getMonth() - (5 - i));
+      return {
+        month: month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        revenueIssued: Math.floor(Math.random() * 50000) + 150000,
+        revenueCollected: Math.floor(Math.random() * 50000) + 140000,
+        changePercent: Math.floor(Math.random() * 30) - 10,
+        status: 'green' as const
+      };
+    }),
+    seasonalPatterns: {
+      strongMonths: ['Mar', 'Apr', 'May', 'Sep', 'Oct'],
+      weakMonths: ['Dec', 'Jan', 'Feb'],
+      avgGrowthRate: 8.5
+    }
+  });
+
+  const generateYoYData = () => ({
+    ytdSummary: {
+      currentYTD: metrics.ytdRevenue.current,
+      previousYTD: metrics.ytdRevenue.lastYear,
+      growthPercent: Math.round(metrics.ytdRevenue.growth),
+      status: metrics.ytdRevenue.growth > 10 ? 'green' as const : metrics.ytdRevenue.growth > 0 ? 'orange' as const : 'red' as const,
+      daysIntoYear: Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24))
+    },
+    monthlyComparison: Array.from({ length: 12 }, (_, i) => ({
+      month: new Date(0, i).toLocaleDateString('en-US', { month: 'short' }),
+      currentYear: Math.floor(Math.random() * 100000) + 200000,
+      previousYear: Math.floor(Math.random() * 80000) + 180000,
+      growthPercent: Math.floor(Math.random() * 20) - 5,
+      status: 'ahead' as const
+    })),
+    quarterlyBreakdown: {
+      q1: { current: 650000, previous: 580000, growth: 12.1 },
+      q2: { current: 720000, previous: 680000, growth: 5.9 },
+      q3: { current: 690000, previous: 640000, growth: 7.8 },
+      q4: { current: 580000, previous: 550000, growth: 5.5 }
+    },
+    projections: {
+      yearEndProjection: 2800000,
+      confidenceLevel: 'high' as const,
+      targetAchievement: 92
+    }
+  });
+
+  const generateDailyRevenueData = () => ({
+    today: {
+      current: metrics.executiveMetrics.revenue.dailyClosedRevenue.amount,
+      target: metrics.executiveMetrics.revenue.dailyClosedRevenue.goal,
+      percentage: metrics.executiveMetrics.revenue.dailyClosedRevenue.percentage,
+      status: metrics.executiveMetrics.revenue.dailyClosedRevenue.status,
+      lastUpdate: new Date().toISOString(),
+      sources: [
+        {
+          source: 'Jobber' as const,
+          amount: Math.floor(metrics.executiveMetrics.revenue.dailyClosedRevenue.amount * 0.7),
+          percentage: 70,
+          lastSync: new Date().toISOString(),
+          status: 'connected' as const
+        },
+        {
+          source: 'QuickBooks' as const,
+          amount: Math.floor(metrics.executiveMetrics.revenue.dailyClosedRevenue.amount * 0.3),
+          percentage: 30,
+          lastSync: new Date().toISOString(),
+          status: 'connected' as const
+        }
+      ]
+    },
+    weeklyData: Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - i));
+      return {
+        date: date.toISOString(),
+        actualRevenue: Math.floor(Math.random() * 8000) + 5000,
+        targetRevenue: 13000,
+        jobberRevenue: Math.floor(Math.random() * 5000) + 3000,
+        quickbooksRevenue: Math.floor(Math.random() * 3000) + 2000,
+        dailyGoal: 13000,
+        percentage: Math.floor(Math.random() * 40) + 60,
+        status: 'green' as const,
+        jobsCompleted: Math.floor(Math.random() * 10) + 5
+      };
+    }),
+    monthlyProgress: {
+      currentMTD: metrics.executiveMetrics.revenue.revenueCollectedMTD.amount,
+      targetMTD: 400000,
+      daysInMonth: 31,
+      daysElapsed: new Date().getDate(),
+      projectedEOM: 420000,
+      onPace: true
+    },
+    realTimeUpdates: true
+  });
+
+  const generateEnhancedARData = () => ({
+    ...metrics.executiveMetrics.revenue.arAging,
+    invoices: Array.from({ length: 25 }, (_, i) => ({
+      id: `inv-${i}`,
+      invoice_number: `INV-${1000 + i}`,
+      client_name: `Client ${i + 1}`,
+      client_email: `client${i + 1}@example.com`,
+      client_phone: `(555) 123-${String(i).padStart(4, '0')}`,
+      amount: Math.floor(Math.random() * 5000) + 1000,
+      balance: Math.floor(Math.random() * 4000) + 500,
+      issue_date: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
+      due_date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      days_overdue: Math.floor(Math.random() * 120),
+      aging_bucket: ['current', '1-30', '31-60', '61-90', '90+'][Math.floor(Math.random() * 5)] as any,
+      status: 'outstanding' as const
+    })),
+    trends: Array.from({ length: 6 }, (_, i) => {
+      const month = new Date();
+      month.setMonth(month.getMonth() - (5 - i));
+      return {
+        month: month.toLocaleDateString('en-US', { month: 'short' }),
+        totalAR: Math.floor(Math.random() * 50000) + 100000,
+        over60Days: Math.floor(Math.random() * 20000) + 10000,
+        over90Days: Math.floor(Math.random() * 10000) + 5000,
+        avgDaysToPayment: Math.floor(Math.random() * 20) + 25
+      };
+    }),
+    alerts: {
+      criticalInvoices: 3,
+      newOverdue: 2,
+      improvingAccounts: 8
+    }
+  });
+
+  const generateOpenPhoneData = () => ({
+    connectionStatus: 'connected' as const,
+    analytics: {
+      today: {
+        totalCalls: metrics.callAnalytics.today.totalCalls,
+        appointmentsBooked: metrics.callAnalytics.today.appointmentsBooked,
+        conversionRate: metrics.callAnalytics.today.totalCalls > 0 ? (metrics.callAnalytics.today.appointmentsBooked / metrics.callAnalytics.today.totalCalls) * 100 : 0,
+        averageDuration: 245,
+        revenueGenerated: 45000,
+        revenuePerCall: metrics.callAnalytics.today.totalCalls > 0 ? 45000 / metrics.callAnalytics.today.totalCalls : 0
+      },
+      thisWeek: {
+        totalCalls: metrics.callAnalytics.thisWeek.totalCalls,
+        appointmentsBooked: metrics.callAnalytics.thisWeek.appointmentsBooked,
+        conversionRate: metrics.callAnalytics.thisWeek.totalCalls > 0 ? (metrics.callAnalytics.thisWeek.appointmentsBooked / metrics.callAnalytics.thisWeek.totalCalls) * 100 : 0,
+        averageDuration: 220,
+        revenueGenerated: 180000,
+        revenuePerCall: metrics.callAnalytics.thisWeek.totalCalls > 0 ? 180000 / metrics.callAnalytics.thisWeek.totalCalls : 0
+      },
+      thisMonth: {
+        totalCalls: metrics.callAnalytics.thisWeek.totalCalls * 4,
+        appointmentsBooked: metrics.callAnalytics.thisWeek.appointmentsBooked * 4,
+        conversionRate: metrics.callAnalytics.thisWeek.totalCalls > 0 ? (metrics.callAnalytics.thisWeek.appointmentsBooked / metrics.callAnalytics.thisWeek.totalCalls) * 100 : 0,
+        averageDuration: 235,
+        revenueGenerated: 720000,
+        revenuePerCall: metrics.callAnalytics.thisWeek.totalCalls > 0 ? 720000 / (metrics.callAnalytics.thisWeek.totalCalls * 4) : 0
+      }
+    },
+    callVolumeData: Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i}:00`,
+      inbound: Math.floor(Math.random() * 15),
+      outbound: Math.floor(Math.random() * 8),
+      booked: Math.floor(Math.random() * 5)
+    })),
+    performanceData: Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      return {
+        date: date.toISOString(),
+        calls: Math.floor(Math.random() * 20) + 10,
+        booked: Math.floor(Math.random() * 8) + 2,
+        revenue: Math.floor(Math.random() * 15000) + 5000,
+        conversionRate: Math.floor(Math.random() * 40) + 20
+      };
+    }),
+    sourceData: [
+      { source: 'Google Ads', calls: 45, bookings: 18, revenue: 125000, conversionRate: 40 },
+      { source: 'Referrals', calls: 32, bookings: 16, revenue: 98000, conversionRate: 50 },
+      { source: 'Website', calls: 28, bookings: 8, revenue: 45000, conversionRate: 28.6 },
+      { source: 'Direct', calls: 15, bookings: 6, revenue: 32000, conversionRate: 40 }
+    ],
+    revenueCorrelation: {
+      callsToRevenueRatio: 2.8,
+      peakCallHours: ['9:00 AM', '2:00 PM', '4:00 PM'],
+      highestRevenueDay: 'Tuesday',
+      conversionTrends: 'improving' as const
+    }
+  });
+
+  const handleManualSync = async (sourceId: string) => {
+    console.log(`Manual sync triggered for ${sourceId}`);
+    // In a real implementation, this would call the actual sync API
+  };
+
+  const handleGlobalSync = async () => {
+    console.log('Global sync triggered');
+    // In a real implementation, this would call the global sync API
+  };
+
+  const handleToggleAutoSync = (enabled: boolean) => {
+    console.log(`Auto sync ${enabled ? 'enabled' : 'disabled'}`);
+    // In a real implementation, this would update the auto sync setting
+  };
+
+  const handleConfigureSource = (sourceId: string) => {
+    console.log(`Configure source: ${sourceId}`);
+    // In a real implementation, this would open the configuration modal
+  };
+
+  const handleOpenPhoneConnect = () => {
+    console.log('OpenPhone connect triggered');
+    // In a real implementation, this would start the OAuth flow
+  };
+
+  const handleOpenPhoneConfigure = () => {
+    console.log('OpenPhone configure triggered');
+    // In a real implementation, this would open configuration settings
+  };
+
+  const handleOpenPhoneViewDetails = (type: 'calls' | 'bookings' | 'revenue') => {
+    console.log(`View OpenPhone details for: ${type}`);
+    // In a real implementation, this would navigate to detailed views
+  };
+
   return (
     <div className="space-y-8">
-      {/* Modern Sync Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={syncJobberData}
-          disabled={syncing}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 shadow-lg transition-all duration-200 transform hover:scale-105"
-        >
-          {syncing ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-              <span className="font-medium">Syncing Financial Data...</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span className="font-medium">Sync Financial Data</span>
-            </>
-          )}
-        </button>
-      </div>
-
       {/* Executive Dashboard - Full Width */}
       <div className="relative -mx-8 -mt-8">
         <ExecutiveDashboard metrics={metrics.executiveMetrics} />
+      </div>
+
+      {/* Enhanced Analytics Section */}
+      <div className="space-y-8">
+        {/* Daily Revenue Tracking */}
+        <DailyRevenueTracker data={generateDailyRevenueData()} />
+
+        {/* Analytics Charts Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <MoMAnalyticsCharts data={generateMoMData()} />
+          <YoYComparisonCharts data={generateYoYData()} />
+        </div>
+
+        {/* Enhanced AR Aging */}
+        <EnhancedARAgingWidget data={generateEnhancedARData()} />
+
+        {/* Sync Status & Controls */}
+        <SyncStatusControls
+          sources={syncSources}
+          globalSyncStatus="idle"
+          lastGlobalSync={new Date().toISOString()}
+          autoSyncEnabled={true}
+          onToggleAutoSync={handleToggleAutoSync}
+          onManualSync={handleManualSync}
+          onGlobalSync={handleGlobalSync}
+          onConfigureSource={handleConfigureSource}
+        />
+
+        {/* OpenPhone Integration */}
+        <OpenPhoneIntegration
+          {...generateOpenPhoneData()}
+          onConnect={handleOpenPhoneConnect}
+          onConfigure={handleOpenPhoneConfigure}
+          onViewDetails={handleOpenPhoneViewDetails}
+        />
       </div>
 
       {/* Traditional Dashboard Sections */}
@@ -244,6 +407,7 @@ export function DashboardContent() {
     </div>
   );
 }
+
 
 function DashboardSkeleton() {
   return (

@@ -11,6 +11,8 @@ interface CircularKPIProps {
   percentage?: number;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: number;
+  onClick?: () => void;
+  showDate?: boolean;
 }
 
 export function CircularKPI({
@@ -21,7 +23,9 @@ export function CircularKPI({
   size = 'medium',
   percentage,
   trend,
-  trendValue
+  trendValue,
+  onClick,
+  showDate = false
 }: CircularKPIProps) {
   const sizeClasses = {
     small: 'w-32 h-32',
@@ -81,20 +85,44 @@ export function CircularKPI({
     return 'text-gray-400';
   };
 
+  const ComponentTag = onClick ? 'button' : 'div';
+
+  const formatDate = () => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  };
+
   return (
     <div className="relative group">
+      {/* Date display above circle */}
+      {showDate && (
+        <div className="text-center mb-4">
+          <div className="text-white text-lg font-medium">
+            {formatDate()}
+          </div>
+        </div>
+      )}
       {/* Main circular badge */}
-      <div className={`
-        ${sizeClass}
-        relative flex flex-col items-center justify-center
-        bg-gradient-to-br ${colors.bg}
-        border-2 ${colors.border}
-        rounded-full
-        shadow-2xl ${colors.glow}
-        transition-all duration-300
-        hover:scale-105 hover:shadow-3xl
-        backdrop-blur-sm
-      `}>
+      <ComponentTag
+        onClick={onClick}
+        className={`
+          ${sizeClass}
+          relative flex flex-col items-center justify-center
+          bg-gradient-to-br ${colors.bg}
+          border-2 ${colors.border}
+          rounded-full
+          shadow-2xl ${colors.glow}
+          transition-all duration-300
+          hover:scale-105 hover:shadow-3xl
+          backdrop-blur-sm
+          ${onClick ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900' : ''}
+        `}
+      >
         {/* Progress ring for percentage-based metrics */}
         {percentage !== undefined && (
           <div className="absolute inset-2">
@@ -165,7 +193,7 @@ export function CircularKPI({
           transition-opacity duration-300
           group-hover:opacity-75
         `} />
-      </div>
+      </ComponentTag>
 
       {/* Floating labels for additional context */}
       {size === 'large' && percentage !== undefined && (

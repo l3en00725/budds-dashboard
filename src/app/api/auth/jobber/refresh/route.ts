@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const cookieStore = await cookies();
     const refreshToken = cookieStore.get('jobber_refresh_token')?.value;
@@ -40,8 +40,7 @@ export async function POST(request: NextRequest) {
     console.log('Token refresh successful');
 
     const response = NextResponse.json({
-      success: true,
-      message: 'Token refreshed successfully'
+      accessToken: tokenData.access_token
     });
 
     // Update the access token cookie

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,38 @@ export async function GET() {
   // Generate a random CSRF state using crypto
   const state = randomBytes(32).toString('hex');
 
+  // Store state in database instead of cookies for better cross-domain reliability
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  try {
+    const { error } = await supabase
+      .from('oauth_states')
+      .insert({
+        state_key: state,
+        provider: 'jobber',
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
+      });
+
+    if (error) {
+      console.error('Failed to store OAuth state:', error);
+      return NextResponse.json(
+        { error: 'Failed to initialize OAuth flow' },
+        { status: 500 }
+      );
+    }
+
+    console.log('OAuth state stored in database:', state.substring(0, 8) + '...');
+  } catch (error) {
+    console.error('Database error storing OAuth state:', error);
+    return NextResponse.json(
+      { error: 'Failed to initialize OAuth flow' },
+      { status: 500 }
+    );
+  }
+
   // Build the authorize URL
   const authUrl = new URL('https://api.getjobber.com/api/oauth/authorize');
   authUrl.searchParams.append('response_type', 'code');
@@ -26,17 +59,8 @@ export async function GET() {
 
   console.log('Generated OAuth URL:', authUrl.toString().replace(state, '[STATE_REDACTED]'));
 
-  // Create response with redirect
+  // Create response with redirect - no cookie needed now
   const response = NextResponse.redirect(authUrl.toString());
-
-  // Set httpOnly cookie with CSRF state using NextResponse.cookies
-  response.cookies.set('jobber_oauth_state', state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 600, // 10 minutes
-    path: '/',
-  });
 
   return response;
 }

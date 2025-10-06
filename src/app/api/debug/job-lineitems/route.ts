@@ -70,12 +70,25 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
+    interface JobWithLineItems {
+      lineItems?: {
+        nodes?: Array<{
+          id: string;
+          name?: string;
+          description?: string;
+          quantity?: number;
+          unitCost?: number;
+          totalCost?: number;
+        }>;
+      };
+    }
+
     // Count jobs with line items
-    const jobsWithLineItems = data.data?.jobs?.nodes?.filter((job: any) =>
+    const jobsWithLineItems = data.data?.jobs?.nodes?.filter((job: JobWithLineItems) =>
       job.lineItems?.nodes?.length > 0
     ) || [];
 
-    const totalLineItems = jobsWithLineItems.reduce((sum: number, job: any) =>
+    const totalLineItems = jobsWithLineItems.reduce((sum: number, job: JobWithLineItems) =>
       sum + (job.lineItems?.nodes?.length || 0), 0
     );
 

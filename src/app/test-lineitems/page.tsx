@@ -49,7 +49,7 @@ export default function TestLineItems() {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <p className="text-gray-600 mb-4">
-            This test checks if Jobber's GraphQL API supports line items in jobs queries.
+            This test checks if Jobber&apos;s GraphQL API supports line items in jobs queries.
             This will help us determine if we can properly count active memberships.
           </p>
 
@@ -79,11 +79,11 @@ export default function TestLineItems() {
         </div>
 
         <div className="mt-6 bg-blue-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-blue-900 mb-2">What we're testing:</h3>
+          <h3 className="font-semibold text-blue-900 mb-2">What we&apos;re testing:</h3>
           <ul className="text-blue-800 text-sm space-y-1">
             <li>• Can we query <code>lineItems</code> field on jobs?</li>
             <li>• Do line items contain <code>name</code>, <code>description</code> fields?</li>
-            <li>• Can we filter for "Budd's membership" line items?</li>
+            <li>• Can we filter for &quot;Budd&apos;s membership&quot; line items?</li>
           </ul>
         </div>
       </div>

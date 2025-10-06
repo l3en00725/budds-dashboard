@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { DashboardContent } from '@/components/dashboard/DashboardContent';
+import { LiveIndicator } from '@/components/dashboard/LiveIndicator';
 
 export default function DashboardPage() {
   return (
@@ -14,15 +15,12 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  Budd's Dashboard
+                  Budd&apos;s Dashboard
                 </h1>
                 <p className="text-sm text-gray-500">Plumbing & HVAC Operations</p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-600 font-medium">Live</span>
-            </div>
+            <LiveIndicator />
           </div>
         </div>
       </div>

@@ -4,7 +4,14 @@ import { createServiceRoleClient } from '@/lib/supabase';
 
 async function detailedHealthCheckHandler(request: NextRequest) {
   const startTime = Date.now();
-  const checks: Record<string, any> = {};
+  interface DetailedHealthCheck {
+    healthy: boolean;
+    responseTime: number;
+    error?: string;
+    details?: Record<string, unknown>;
+  }
+
+  const checks: Record<string, DetailedHealthCheck> = {};
 
   // Detailed Supabase checks
   checks.supabase = {
@@ -170,7 +177,7 @@ async function detailedHealthCheckHandler(request: NextRequest) {
   }
 
   // Check record counts
-  const recordCounts = {};
+  const recordCounts: Record<string, number> = {};
   for (const table of ['jobber_jobs', 'jobber_invoices', 'jobber_payments', 'openphone_calls']) {
     const { count } = await supabase.from(table).select('*', { count: 'exact', head: true });
     recordCounts[table] = count || 0;

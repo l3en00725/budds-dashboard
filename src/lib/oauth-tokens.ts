@@ -71,7 +71,14 @@ export class OAuthTokenManager {
       return null;
     }
 
-    // Check if token is expired
+    // Special handling for OpenPhone API keys - they don't traditionally expire
+    if (provider === 'openphone' && tokenRecord.token_type === 'api_key') {
+      // For API keys, we can optionally validate they still work
+      // but for performance, we'll just return the key unless it's very old
+      return tokenRecord.access_token;
+    }
+
+    // Check if token is expired (for OAuth tokens like Jobber)
     if (tokenRecord.expires_at) {
       const expiresAt = new Date(tokenRecord.expires_at);
       const now = new Date();
@@ -104,6 +111,8 @@ export class OAuthTokenManager {
         return await this.refreshJobberToken(tokenRecord.refresh_token);
       } else if (provider === 'openphone') {
         return await this.refreshOpenPhoneToken(tokenRecord.refresh_token);
+      } else if (provider === 'quickbooks') {
+        return await this.refreshQuickBooksToken(tokenRecord.refresh_token);
       } else {
         throw new Error(`Unsupported provider: ${provider}`);
       }
@@ -148,36 +157,73 @@ export class OAuthTokenManager {
   }
 
   private async refreshOpenPhoneToken(refreshToken: string): Promise<string | null> {
-    const OPENPHONE_CLIENT_ID = process.env.OPENPHONE_CLIENT_ID;
-    const OPENPHONE_CLIENT_SECRET = process.env.OPENPHONE_CLIENT_SECRET;
+    // OpenPhone uses API keys, not OAuth tokens with refresh capability
+    // API keys don't expire or need refreshing, so we just validate the existing key
+    console.log('OpenPhone uses API keys that do not require refresh');
 
-    if (!OPENPHONE_CLIENT_ID || !OPENPHONE_CLIENT_SECRET) {
-      throw new Error('Missing OpenPhone client credentials');
+    const tokenRecord = await this.getToken('openphone');
+    if (!tokenRecord) {
+      throw new Error('No OpenPhone API key found');
     }
 
-    const response = await fetch('https://api.openphone.com/v1/auth/refresh', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: OPENPHONE_CLIENT_ID,
-        client_secret: OPENPHONE_CLIENT_SECRET,
-        refresh_token: refreshToken,
-      }),
-    });
+    // Validate the API key is still working
+    try {
+      const testResponse = await fetch('https://api.openphone.com/v1/phone-numbers', {
+        headers: {
+          'Authorization': tokenRecord.access_token,
+        },
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenPhone token refresh failed: ${response.status} ${errorText}`);
+      if (testResponse.ok) {
+        console.log('OpenPhone API key is still valid');
+        return tokenRecord.access_token;
+      } else {
+        console.error('OpenPhone API key validation failed');
+        throw new Error('OpenPhone API key is no longer valid');
+      }
+    } catch (error) {
+      console.error('Error validating OpenPhone API key:', error);
+      throw new Error('Failed to validate OpenPhone API key');
+    }
+  }
+
+  private async refreshQuickBooksToken(refreshToken: string): Promise<string | null> {
+    const QB_CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
+    const QB_CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
+
+    if (!QB_CLIENT_ID || !QB_CLIENT_SECRET) {
+      throw new Error('Missing QuickBooks client credentials');
     }
 
-    const tokenData = await response.json();
+    try {
+      const response = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${Buffer.from(`${QB_CLIENT_ID}:${QB_CLIENT_SECRET}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+      });
 
-    // Store the new token
-    await this.storeToken('openphone', tokenData);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`QuickBooks token refresh failed: ${response.status} ${errorText}`);
+      }
 
-    return tokenData.access_token;
+      const tokenData = await response.json();
+
+      // Store the new token
+      await this.storeToken('quickbooks', tokenData);
+
+      console.log('Successfully refreshed QuickBooks token');
+      return tokenData.access_token;
+    } catch (error) {
+      console.error('QuickBooks token refresh error:', error);
+      throw error;
+    }
   }
 
   async deleteToken(provider: string): Promise<void> {

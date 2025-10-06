@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 export interface AppError extends Error {
   code?: string;
   statusCode?: number;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   isOperational?: boolean;
 }
 
@@ -12,13 +12,13 @@ export class OperationalError extends Error implements AppError {
   public readonly isOperational = true;
   public readonly statusCode: number;
   public readonly code?: string;
-  public readonly context?: Record<string, any>;
+  public readonly context?: Record<string, unknown>;
 
   constructor(
     message: string,
     statusCode: number = 500,
     code?: string,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'OperationalError';
@@ -35,7 +35,7 @@ export class IntegrationError extends OperationalError {
     integration: 'jobber' | 'openphone' | 'supabase' | 'anthropic',
     message: string,
     originalError?: Error,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ) {
     super(
       `${integration.toUpperCase()} Integration Error: ${message}`,
@@ -52,21 +52,21 @@ export class IntegrationError extends OperationalError {
 }
 
 export class AuthenticationError extends OperationalError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, 401, 'AUTH_ERROR', context);
     this.name = 'AuthenticationError';
   }
 }
 
 export class ValidationError extends OperationalError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, 400, 'VALIDATION_ERROR', context);
     this.name = 'ValidationError';
   }
 }
 
 export class RateLimitError extends OperationalError {
-  constructor(service: string, retryAfter?: number, context?: Record<string, any>) {
+  constructor(service: string, retryAfter?: number, context?: Record<string, unknown>) {
     super(
       `Rate limit exceeded for ${service}`,
       429,
@@ -139,7 +139,7 @@ export function handleApiError(error: unknown, operation?: string): NextResponse
 /**
  * Wrapper for API route handlers with automatic error handling
  */
-export function withErrorHandling<T extends any[], R>(
+export function withErrorHandling<T extends unknown[], R>(
   handler: (...args: T) => Promise<R>,
   operation?: string
 ) {

@@ -1,6 +1,5 @@
 'use client';
 
-import { MetricsCard } from './MetricsCard';
 
 interface JobPerformanceData {
   topJobs: Array<{
@@ -48,7 +47,7 @@ export function JobPerformanceWidget({ data }: JobPerformanceWidgetProps) {
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Revenue Jobs</h3>
         <div className="space-y-3">
-          {data.topJobs.slice(0, 5).map((job, index) => (
+          {data.topJobs.slice(0, 5).map((job) => (
             <div key={job.jobNumber} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex-1">
                 <div className="flex items-center gap-2">

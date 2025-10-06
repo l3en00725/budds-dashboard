@@ -4,7 +4,13 @@ import { createServiceRoleClient } from '@/lib/supabase';
 
 async function healthCheckHandler(request: NextRequest) {
   const startTime = Date.now();
-  const checks: Record<string, any> = {};
+  interface HealthCheck {
+    healthy: boolean;
+    responseTime: number;
+    error?: string;
+  }
+
+  const checks: Record<string, HealthCheck> = {};
 
   // Check Supabase connection
   checks.supabase = await checkServiceHealth(

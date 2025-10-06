@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storeOAuthToken } from '@/lib/oauth-tokens';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
@@ -40,34 +41,47 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Validate state against the stored cookie using NextRequest.cookies
-  const storedState = request.cookies.get('jobber_oauth_state')?.value;
+  // Validate state against the stored state in database
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
-  console.log('OAuth state validation debug:', {
-    receivedState: state?.substring(0, 8) + '...',
-    storedState: storedState?.substring(0, 8) + '...',
-    hasStoredState: !!storedState,
-    statesMatch: storedState === state,
-  });
+  let isValidState = false;
+  try {
+    const { data: stateRecord, error } = await supabase
+      .from('oauth_states')
+      .select('*')
+      .eq('state_key', state)
+      .eq('provider', 'jobber')
+      .gte('expires_at', new Date().toISOString())
+      .single();
 
-  // TEMPORARY: Disable state validation to test OAuth flow
-  if (!storedState || storedState !== state) {
-    console.error('CSRF state validation failed - CONTINUING WITHOUT VALIDATION');
-    console.error('State mismatch details:', {
-      receivedState: state,
-      storedState: storedState,
-      allCookies: Object.fromEntries(
-        request.cookies.getAll().map(c => [c.name, c.value])
-      )
-    });
-    // TODO: Re-enable after testing OAuth flow
-    // return NextResponse.json(
-    //   {
-    //     error: 'Invalid state parameter - CSRF protection failed',
-    //     hint: 'This could be due to cookies being disabled, the request taking too long, or a potential security issue.'
-    //   },
-    //   { status: 401 }
-    // );
+    if (error) {
+      console.error('Failed to validate OAuth state:', error);
+    } else if (stateRecord) {
+      isValidState = true;
+      console.log('OAuth state validated successfully from database');
+
+      // Clean up the used state
+      await supabase
+        .from('oauth_states')
+        .delete()
+        .eq('state_key', state);
+    }
+  } catch (error) {
+    console.error('Database error validating OAuth state:', error);
+  }
+
+  if (!isValidState) {
+    console.error('CSRF state validation failed - state not found or expired in database');
+    return NextResponse.json(
+      {
+        error: 'Invalid state parameter - CSRF protection failed',
+        hint: 'The OAuth state has expired or is invalid. Please try the authorization flow again.'
+      },
+      { status: 401 }
+    );
   }
 
   try {
@@ -147,8 +161,7 @@ export async function GET(request: NextRequest) {
       maxAge: tokenData.expires_in || 7200,
     });
 
-    // Clear the OAuth state cookie
-    response.cookies.delete('jobber_oauth_state');
+    // OAuth state already cleaned up during validation
 
     console.log('OAuth flow completed successfully, redirecting to dashboard');
     return response;

@@ -35,7 +35,9 @@ Executive dashboard for plumbing and HVAC businesses integrating Jobber CRM and 
 - **Integrations**:
   - Jobber API (GraphQL)
   - OpenPhone API (REST)
-- **Authentication**: OAuth 2.0 with automatic token refresh
+- **Authentication**:
+  - Jobber: OAuth 2.0 with automatic token refresh
+  - OpenPhone: API Key authentication
 
 ## 📊 Data Sources
 
@@ -83,8 +85,9 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# OpenPhone Configuration
+# OpenPhone Configuration (API Key Authentication)
 OPENPHONE_API_KEY=your_api_key
+OPENPHONE_API_BASE_URL=https://api.openphone.com/v1
 OPENPHONE_PHONE_NUMBER_ID=your_phone_number_id
 
 # App Configuration

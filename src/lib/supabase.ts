@@ -344,6 +344,41 @@ export interface Database {
           created_at?: string;
         };
       };
+      oauth_tokens: {
+        Row: {
+          id: string;
+          provider: string;
+          access_token: string;
+          refresh_token: string | null;
+          token_type: string | null;
+          expires_at: string | null;
+          scope: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider: string;
+          access_token: string;
+          refresh_token?: string | null;
+          token_type?: string | null;
+          expires_at?: string | null;
+          scope?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          provider?: string;
+          access_token?: string;
+          refresh_token?: string | null;
+          token_type?: string | null;
+          expires_at?: string | null;
+          scope?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }

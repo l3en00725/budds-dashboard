@@ -28,7 +28,7 @@ export function OpenQuotesWidget({ data }: OpenQuotesWidgetProps) {
     });
   };
 
-  const handleFollowUp = (quote: any) => {
+  const handleFollowUp = (quote: { quote_id?: string; id: string }) => {
     // In a real implementation, this would open Jobber or initiate contact
     const jobberUrl = `https://secure.getjobber.com/quotes/${quote.quote_id}`;
     window.open(jobberUrl, '_blank');

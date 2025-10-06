@@ -15,10 +15,24 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Handle call completed events
-    if (payload.event === 'call.completed' || payload.type === 'call.completed') {
+    // Handle different event types
+    const eventType = payload.event || payload.type;
+
+    if (eventType?.startsWith('call.')) {
       const callData = payload.data || payload;
 
+      console.log(`Processing ${eventType} for call ${callData.id}`);
+
+      // For call.ringing, just log but don't store yet
+      if (eventType === 'call.ringing') {
+        console.log(`Call ${callData.id} is ringing from ${callData.from}`);
+        return NextResponse.json({
+          success: true,
+          message: 'Call ringing event logged'
+        });
+      }
+
+      // For call.completed, call.transcript.completed, call.recording.completed, call.summary.completed
       // Extract call information
       const callInfo = {
         call_id: callData.id,
@@ -29,26 +43,39 @@ export async function POST(request: NextRequest) {
         transcript: callData.transcript || null,
       };
 
-      // Get enhanced classification with sales intelligence
-      const classification = await classifyCallWithClaude(
-        callInfo.transcript || '',
-        callInfo.duration,
-        callInfo.call_date,
-        callInfo.caller_number || 'Unknown'
-      );
+      // Only run classification if we have meaningful data (call completed or transcript available)
+      let classification = null;
+      if (eventType === 'call.completed' || (eventType === 'call.transcript.completed' && callInfo.transcript)) {
+        classification = await classifyCallWithClaude(
+          callInfo.transcript || '',
+          callInfo.duration,
+          callInfo.call_date,
+          callInfo.caller_number || 'Unknown'
+        );
+      }
 
-      // Store call data using only existing schema fields
-      const { data: insertData, error: insertError } = await supabase.from('openphone_calls').upsert({
+      // Store/update call data using upsert (will update existing records with new info)
+      const callRecord = {
         call_id: callInfo.call_id,
         caller_number: callInfo.caller_number,
         direction: callInfo.direction,
         duration: callInfo.duration,
         call_date: callInfo.call_date,
         transcript: callInfo.transcript,
-        classified_as_booked: classification.bookable_opportunity,
-        classification_confidence: classification.confidence_score / 100,
         pulled_at: new Date().toISOString(),
-      });
+      };
+
+      // Add classification if we have it
+      if (classification) {
+        callRecord.classified_as_booked = classification.bookable_opportunity;
+        callRecord.classification_confidence = classification.confidence_score / 100;
+      }
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('openphone_calls')
+        .upsert(callRecord, {
+          onConflict: 'call_id'
+        });
 
       if (insertError) {
         console.error('Database insertion error:', insertError);
@@ -56,30 +83,53 @@ export async function POST(request: NextRequest) {
           {
             error: 'Failed to save call data',
             details: insertError.message,
-            classification: classification
+            event: eventType
           },
           { status: 500 }
         );
       }
 
-      console.log(`Call ${callInfo.call_id} processed:`, {
-        outcome: classification.outcome,
-        bookable: classification.bookable_opportunity,
-        pipeline: classification.pipeline_stage,
-        sentiment: classification.sentiment,
-        confidence: classification.confidence_score
+      console.log(`${eventType} processed for call ${callInfo.call_id}:`, {
+        hasTranscript: !!callInfo.transcript,
+        duration: callInfo.duration,
+        classification: classification ? {
+          outcome: classification.outcome,
+          bookable: classification.bookable_opportunity,
+          confidence: classification.confidence_score
+        } : 'Not classified yet'
       });
 
       return NextResponse.json({
         success: true,
-        message: 'Call processed with advanced classification',
-        classification: {
+        message: `${eventType} processed successfully`,
+        call_id: callInfo.call_id,
+        classification: classification ? {
           outcome: classification.outcome,
           bookable_opportunity: classification.bookable_opportunity,
           pipeline_stage: classification.pipeline_stage,
           sentiment: classification.sentiment,
           confidence: classification.confidence_score
-        }
+        } : null
+      });
+    }
+
+    // Handle message events
+    if (eventType?.startsWith('message.')) {
+      const messageData = payload.data || payload;
+
+      console.log(`Processing ${eventType}:`, {
+        id: messageData.id,
+        from: messageData.from,
+        to: messageData.to,
+        body: messageData.body?.substring(0, 100) + '...'
+      });
+
+      // For now, just log message events
+      // You could store these in a separate messages table if needed
+      return NextResponse.json({
+        success: true,
+        message: `${eventType} logged successfully`,
+        message_id: messageData.id
       });
     }
 

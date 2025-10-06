@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase';
-import { cookies } from 'next/headers';
 import {
   withErrorHandling,
   IntegrationError,
@@ -8,6 +7,7 @@ import {
   RateLimitError,
   retryWithBackoff
 } from '@/lib/error-handler';
+import { getOAuthToken, refreshOAuthToken } from '@/lib/oauth-tokens';
 import * as Sentry from '@sentry/nextjs';
 
 const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber.com/api/graphql';
@@ -98,6 +98,7 @@ async function syncJobberHandler(request: NextRequest) {
 }
 
 export const POST = withErrorHandling(syncJobberHandler, 'jobber_sync');
+export const runtime = 'nodejs';
 
 async function getJobberToken(request: NextRequest): Promise<string | null> {
   try {
@@ -105,75 +106,27 @@ async function getJobberToken(request: NextRequest): Promise<string | null> {
     const authHeader = request.headers.get('authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
+      console.log('Using token from Authorization header');
       return token;
     }
 
-    // Try to get from request cookies
-    let accessToken = request.cookies.get('jobber_access_token')?.value;
-    if (accessToken) {
-      return accessToken;
+    // Use the OAuth token manager for persistent token storage
+    console.log('Attempting to get Jobber token from OAuth token manager...');
+    const token = await getOAuthToken('jobber');
+
+    if (token) {
+      console.log('Successfully retrieved Jobber token from OAuth token manager');
+      return token;
     }
 
-    // Fallback to server cookies
-    const cookieStore = await cookies();
-    accessToken = cookieStore.get('jobber_access_token')?.value;
-
-    if (accessToken) {
-      return accessToken;
-    }
-
-    // If no access token, try to refresh using refresh token
-    const refreshToken = request.cookies.get('jobber_refresh_token')?.value ||
-                        cookieStore.get('jobber_refresh_token')?.value;
-
-    if (refreshToken) {
-      console.log('Access token not found, attempting to refresh...');
-      const newAccessToken = await refreshJobberToken(refreshToken);
-      if (newAccessToken) {
-        console.log('Successfully refreshed Jobber token');
-        return newAccessToken;
-      }
-    }
-
+    console.warn('No valid Jobber token found in OAuth token manager');
     return null;
   } catch (error) {
-    console.error('Error getting Jobber token from cookies:', error);
+    console.error('Error getting Jobber token:', error);
     return null;
   }
 }
 
-async function refreshJobberToken(refreshToken: string): Promise<string | null> {
-  try {
-    const response = await fetch('https://api.getjobber.com/api/oauth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: process.env.JOBBER_CLIENT_ID!,
-        client_secret: process.env.JOBBER_CLIENT_SECRET!,
-        refresh_token: refreshToken,
-      }).toString(),
-    });
-
-    if (!response.ok) {
-      console.error(`Token refresh failed: ${response.status}`);
-      return null;
-    }
-
-    const tokenData = await response.json();
-
-    // Update cookies with new tokens (Note: this won't affect current request but future ones)
-    // In a real app, you'd want to store this in a database or return it to update cookies
-    console.log('Jobber token refreshed successfully');
-
-    return tokenData.access_token;
-  } catch (error) {
-    console.error('Jobber token refresh error:', error);
-    return null;
-  }
-}
 
 async function makeJobberRequest(query: string, variables: Record<string, unknown> = {}, request: NextRequest, retryCount = 0) {
   const token = await getJobberToken(request);
@@ -321,65 +274,108 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
     }
 
     // Set historical date to September 1st, 2025 for accurate financial data
+    // This ensures we capture all relevant business data from the fiscal period start
     const historicalDate = '2025-09-01T00:00:00Z';
+    console.log(`Syncing jobs from ${historicalDate} to present...`);
     const data = await makeJobberRequest(query, { first: 15, after: cursor, createdAtGte: historicalDate }, request);
     const jobs = data.jobs.nodes;
 
     console.log(`Processing ${jobs.length} jobs (batch ${Math.floor(recordsSynced / 15) + 1})...`);
 
+    if (jobs.length === 0) {
+      console.log('No more jobs to process, ending pagination');
+      break;
+    }
+
     for (const job of jobs) {
-      // Store job data
-      await supabase.from('jobber_jobs').upsert({
-        job_id: job.id,
-        job_number: job.jobNumber,
-        title: job.title,
-        description: null, // Field not available in API
-        status: job.jobStatus,
-        invoiced: job.jobStatus === 'complete', // Simplified logic
-        revenue: job.total || 0,
-        client_id: job.client?.id,
-        client_name: `${job.client?.firstName || ''} ${job.client?.lastName || ''}`.trim() || job.client?.companyName,
-        start_date: job.startAt,
-        end_date: job.endAt,
-        created_at_jobber: job.createdAt,
-        pulled_at: new Date().toISOString(),
-      });
+      try {
+        // Validate job data before storing
+        if (!job.id) {
+          console.warn('Skipping job with missing ID:', job);
+          continue;
+        }
 
-      // Store line items separately for accurate membership analysis
-      if (job.lineItems?.nodes?.length > 0) {
-        for (const lineItem of job.lineItems.nodes) {
-          // Store each line item in its own record
-          await supabase.from('jobber_line_items').upsert({
-            line_item_id: lineItem.id,
-            job_id: job.id,
-            name: lineItem.name,
-            description: lineItem.description,
-            quantity: lineItem.quantity || 0,
-            unit_cost: lineItem.unitCost || 0,
-            total_cost: lineItem.totalCost || 0,
-            pulled_at: new Date().toISOString(),
-          });
+        // Store job data with improved validation
+        const jobData = {
+          job_id: job.id,
+          job_number: job.jobNumber || null,
+          title: job.title || 'Untitled Job',
+          description: null, // Field not available in API
+          status: job.jobStatus || 'unknown',
+          invoiced: job.jobStatus === 'complete' || job.jobStatus === 'archived',
+          revenue: Math.max(0, job.total || 0), // Ensure non-negative revenue
+          client_id: job.client?.id || null,
+          client_name: `${job.client?.firstName || ''} ${job.client?.lastName || ''}`.trim() || job.client?.companyName || 'Unknown Client',
+          start_date: job.startAt || null,
+          end_date: job.endAt || null,
+          created_at_jobber: job.createdAt,
+          pulled_at: new Date().toISOString(),
+        };
 
-          // Update job description with membership info if found
-          const membershipKeywords = ['membership', 'silver', 'gold', 'platinum', 'budd'];
-          const hasMembership = membershipKeywords.some(keyword =>
-            lineItem.name?.toLowerCase().includes(keyword) ||
-            lineItem.description?.toLowerCase().includes(keyword)
-          );
+        const { error: jobError } = await supabase.from('jobber_jobs').upsert(jobData);
+        if (jobError) {
+          console.error(`Error storing job ${job.id}:`, jobError);
+          continue;
+        }
 
-          if (hasMembership) {
-            const membershipInfo = [];
-            if (lineItem.name) membershipInfo.push(`LineItem: ${lineItem.name}`);
-            if (lineItem.description) membershipInfo.push(`Desc: ${lineItem.description.substring(0, 100)}`);
+        // Store line items separately for accurate membership analysis
+        if (job.lineItems?.nodes?.length > 0) {
+          for (const lineItem of job.lineItems.nodes) {
+            try {
+              if (!lineItem.id) {
+                console.warn('Skipping line item with missing ID for job:', job.id);
+                continue;
+              }
 
-            // Update job description with membership line item info
-            await supabase.from('jobber_jobs')
-              .update({
-                description: membershipInfo.join(' | ')
-              })
-              .eq('job_id', job.id);
+              // Store each line item in its own record with validation
+              const lineItemData = {
+                line_item_id: lineItem.id,
+                job_id: job.id,
+                name: lineItem.name || 'Unnamed Item',
+                description: lineItem.description || null,
+                quantity: Math.max(0, lineItem.quantity || 0),
+                unit_cost: Math.max(0, lineItem.unitCost || 0),
+                total_cost: Math.max(0, lineItem.totalCost || 0),
+                pulled_at: new Date().toISOString(),
+              };
+
+              const { error: lineItemError } = await supabase.from('jobber_line_items').upsert(lineItemData);
+              if (lineItemError) {
+                console.error(`Error storing line item ${lineItem.id} for job ${job.id}:`, lineItemError);
+                continue;
+              }
+
+              // Update job description with membership info if found
+              const membershipKeywords = ['membership', 'silver', 'gold', 'platinum', 'budd'];
+              const hasMembership = membershipKeywords.some(keyword =>
+                lineItem.name?.toLowerCase().includes(keyword) ||
+                lineItem.description?.toLowerCase().includes(keyword)
+              );
+
+              if (hasMembership) {
+                const membershipInfo = [];
+                if (lineItem.name) membershipInfo.push(`LineItem: ${lineItem.name}`);
+                if (lineItem.description) membershipInfo.push(`Desc: ${lineItem.description.substring(0, 100)}`);
+
+                // Update job description with membership line item info
+                const { error: updateError } = await supabase.from('jobber_jobs')
+                  .update({
+                    description: membershipInfo.join(' | ')
+                  })
+                  .eq('job_id', job.id);
+
+                if (updateError) {
+                  console.error(`Error updating job description for ${job.id}:`, updateError);
+                }
+              }
+            } catch (lineItemError) {
+              console.error(`Error processing line item ${lineItem.id} for job ${job.id}:`, lineItemError);
+            }
           }
         }
+      } catch (jobError) {
+        console.error(`Error processing job ${job.id}:`, jobError);
+        // Continue with next job instead of failing the entire sync
       }
 
       recordsSynced++;
@@ -431,26 +427,43 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
 
   while (hasNextPage) {
     // Set historical date to September 1st, 2025 for accurate financial data
+    // Use updatedAtGte to ensure we get invoices that have been modified since our target date
     const historicalDate = '2025-09-01T00:00:00Z';
+    console.log(`Syncing invoices updated since ${historicalDate}...`);
     const data = await makeJobberRequest(query, { first: 50, after: cursor, updatedAtGte: historicalDate }, request);
     const invoices = data.invoices.nodes;
 
     for (const invoice of invoices) {
-      await supabase.from('jobber_invoices').upsert({
-        invoice_id: invoice.id,
-        invoice_number: invoice.invoiceNumber,
-        client_id: invoice.client?.id,
-        client_name: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() || invoice.client?.companyName,
-        job_id: invoice.job?.id,
-        status: invoice.invoiceStatus,
-        amount: invoice.total || 0,
-        balance: invoice.outstandingAmount || 0,
-        issue_date: invoice.issueDate,
-        due_date: invoice.dueDate,
-        created_at_jobber: invoice.createdAt,
-        pulled_at: new Date().toISOString(),
-      });
-      recordsSynced++;
+      try {
+        if (!invoice.id) {
+          console.warn('Skipping invoice with missing ID:', invoice);
+          continue;
+        }
+
+        const invoiceData = {
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoiceNumber || null,
+          client_id: invoice.client?.id || null,
+          client_name: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() || invoice.client?.companyName || 'Unknown Client',
+          job_id: invoice.job?.id || null,
+          status: invoice.invoiceStatus || 'unknown',
+          amount: Math.max(0, invoice.total || 0),
+          balance: Math.max(0, invoice.outstandingAmount || 0),
+          issue_date: invoice.issueDate || null,
+          due_date: invoice.dueDate || null,
+          created_at_jobber: invoice.createdAt,
+          pulled_at: new Date().toISOString(),
+        };
+
+        const { error: invoiceError } = await supabase.from('jobber_invoices').upsert(invoiceData);
+        if (invoiceError) {
+          console.error(`Error storing invoice ${invoice.id}:`, invoiceError);
+          continue;
+        }
+        recordsSynced++;
+      } catch (error) {
+        console.error(`Error processing invoice ${invoice.id}:`, error);
+      }
     }
 
     hasNextPage = data.invoices.pageInfo.hasNextPage;
@@ -495,23 +508,40 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
 
   while (hasNextPage) {
     // Set historical date to September 1st, 2025 for accurate financial data
+    // This ensures we capture all payments from the relevant business period
     const historicalDate = '2025-09-01T00:00:00Z';
+    console.log(`Syncing payments created since ${historicalDate}...`);
     const data = await makeJobberRequest(query, { first: 50, after: cursor, createdAtGte: historicalDate }, request);
     const payments = data.payments.nodes;
 
     for (const payment of payments) {
-      await supabase.from('jobber_payments').upsert({
-        payment_id: payment.id,
-        customer: `${payment.client?.firstName || ''} ${payment.client?.lastName || ''}`.trim() || payment.client?.companyName,
-        client_id: payment.client?.id,
-        invoice_id: payment.invoice?.id,
-        amount: payment.amount || 0,
-        payment_date: payment.paymentDate,
-        payment_method: payment.paymentMethod,
-        created_at_jobber: payment.createdAt,
-        pulled_at: new Date().toISOString(),
-      });
-      recordsSynced++;
+      try {
+        if (!payment.id) {
+          console.warn('Skipping payment with missing ID:', payment);
+          continue;
+        }
+
+        const paymentData = {
+          payment_id: payment.id,
+          customer: `${payment.client?.firstName || ''} ${payment.client?.lastName || ''}`.trim() || payment.client?.companyName || 'Unknown Client',
+          client_id: payment.client?.id || null,
+          invoice_id: payment.invoice?.id || null,
+          amount: Math.max(0, payment.amount || 0),
+          payment_date: payment.paymentDate || null,
+          payment_method: payment.paymentMethod || 'unknown',
+          created_at_jobber: payment.createdAt,
+          pulled_at: new Date().toISOString(),
+        };
+
+        const { error: paymentError } = await supabase.from('jobber_payments').upsert(paymentData);
+        if (paymentError) {
+          console.error(`Error storing payment ${payment.id}:`, paymentError);
+          continue;
+        }
+        recordsSynced++;
+      } catch (error) {
+        console.error(`Error processing payment ${payment.id}:`, error);
+      }
     }
 
     hasNextPage = data.payments.pageInfo.hasNextPage;

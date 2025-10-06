@@ -1,12 +1,5 @@
 import { createServerComponentClient } from './supabase';
-import { Database } from './supabase';
-
-type JobberJob = Database['public']['Tables']['jobber_jobs']['Row'];
-type JobberQuote = Database['public']['Tables']['jobber_quotes']['Row'];
-type JobberInvoice = Database['public']['Tables']['jobber_invoices']['Row'];
-type JobberPayment = Database['public']['Tables']['jobber_payments']['Row'];
-type QuickBooksRevenue = Database['public']['Tables']['quickbooks_revenue_ytd']['Row'];
-type DashboardTarget = Database['public']['Tables']['dashboard_targets']['Row'];
+import { BusinessDateUtils } from './date-utils';
 
 export interface DashboardMetrics {
   dailyTarget: {
@@ -160,8 +153,41 @@ export interface DashboardMetrics {
   };
 }
 
+interface SupabaseClient {
+  from: (table: string) => {
+    select: (columns: string) => SupabaseQueryBuilder;
+    upsert: (data: Record<string, unknown>) => SupabaseQueryBuilder;
+    eq: (column: string, value: unknown) => SupabaseQueryBuilder;
+    gte: (column: string, value: unknown) => SupabaseQueryBuilder;
+    lt: (column: string, value: unknown) => SupabaseQueryBuilder;
+    gt: (column: string, value: unknown) => SupabaseQueryBuilder;
+    neq: (column: string, value: unknown) => SupabaseQueryBuilder;
+    or: (query: string) => SupabaseQueryBuilder;
+    order: (column: string, options?: { ascending: boolean }) => SupabaseQueryBuilder;
+    range: (from: number, to: number) => SupabaseQueryBuilder;
+    limit: (count: number) => SupabaseQueryBuilder;
+    single: () => SupabaseQueryBuilder;
+  };
+}
+
+interface SupabaseQueryBuilder {
+  select: (columns: string) => SupabaseQueryBuilder;
+  upsert: (data: Record<string, unknown>) => SupabaseQueryBuilder;
+  eq: (column: string, value: unknown) => SupabaseQueryBuilder;
+  gte: (column: string, value: unknown) => SupabaseQueryBuilder;
+  lt: (column: string, value: unknown) => SupabaseQueryBuilder;
+  gt: (column: string, value: unknown) => SupabaseQueryBuilder;
+  neq: (column: string, value: unknown) => SupabaseQueryBuilder;
+  or: (query: string) => SupabaseQueryBuilder;
+  order: (column: string, options?: { ascending: boolean }) => SupabaseQueryBuilder;
+  range: (from: number, to: number) => SupabaseQueryBuilder;
+  limit: (count: number) => SupabaseQueryBuilder;
+  single: () => SupabaseQueryBuilder;
+  match: (query: Record<string, unknown>) => SupabaseQueryBuilder;
+}
+
 export class DashboardService {
-  private supabase: any;
+  private supabase: SupabaseClient | null = null;
 
   constructor() {
     // Initialize in async method
@@ -365,11 +391,14 @@ export class DashboardService {
     // Date calculations
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    // For demo purposes, show September vs August comparison
-    const startOfMonth = new Date(2025, 8, 1); // September 2025
-    const startOfLastMonth = new Date(2025, 7, 1); // August 2025
-    const startOfNextMonth = new Date(2025, 9, 1); // October 2025
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    // Dynamic month calculations - October 2025 vs September 2025
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-based: 9 = October
+
+    const startOfMonth = new Date(currentYear, currentMonth, 1); // October 2025
+    const startOfLastMonth = new Date(currentYear, currentMonth - 1, 1); // September 2025
+    const startOfNextMonth = new Date(currentYear, currentMonth + 1, 1); // November 2025
 
     // Get all jobs for efficiency calculations (last 30 days)
     const { data: jobs30d } = await supabase
@@ -384,35 +413,7 @@ export class DashboardService {
       .gte('created_at_jobber', sevenDaysAgo.toISOString())
       .eq('status', 'archived');
 
-    // Get invoices for revenue calculations
-    const { data: invoicesThisMonth } = await supabase
-      .from('jobber_invoices')
-      .select('invoice_id, amount, balance, issue_date, status')
-      .gte('issue_date', startOfMonth.toISOString().split('T')[0]);
 
-    const { data: invoicesLastMonth } = await supabase
-      .from('jobber_invoices')
-      .select('invoice_id, amount, balance, issue_date, status')
-      .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
-      .lt('issue_date', startOfMonth.toISOString().split('T')[0]);
-
-    // Get payments for collection calculations
-    const { data: paymentsThisMonth } = await supabase
-      .from('jobber_payments')
-      .select('payment_id, amount, payment_date')
-      .gte('payment_date', startOfMonth.toISOString().split('T')[0]);
-
-    const { data: paymentsLastMonth } = await supabase
-      .from('jobber_payments')
-      .select('payment_id, amount, payment_date')
-      .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
-      .lt('payment_date', startOfMonth.toISOString().split('T')[0]);
-
-    // Get today's invoices for daily revenue
-    const { data: todayInvoices } = await supabase
-      .from('jobber_invoices')
-      .select('invoice_id, amount, issue_date, status')
-      .eq('issue_date', today);
 
     // Get all outstanding invoices for AR aging
     const { data: outstandingInvoices } = await supabase
@@ -476,20 +477,53 @@ export class DashboardService {
 
     const revenueIssuedMTD = currentMonthInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
     const revenueIssuedLastMonth = lastMonthInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
-    const revenueCollectedMTD = currentMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
+    // Get real-time payments data from Jobber API
+    let revenueCollectedMTD = 0;
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobber/payments-mtd`, {
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      if (response.ok) {
+        const paymentsData = await response.json();
+        revenueCollectedMTD = paymentsData.totalRevenue || 0;
+      } else {
+        // Fallback to local database
+        revenueCollectedMTD = currentMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
+      }
+    } catch (error) {
+      // Fallback to local database
+      revenueCollectedMTD = currentMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
+    }
     const revenueCollectedLastMonth = lastMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
 
-    // Get jobs completed TODAY only for daily revenue (use actual current date)
-    const actualToday = new Date().toISOString().split('T')[0];
-    const { data: todayCompletedJobs } = await supabase
+    // Get jobs CLOSED TODAY for daily revenue (using system date for consistency with test data)
+    const actualToday = new Date().toISOString().split('T')[0]; // Use system date to match test data
+
+    const { data: todayClosedJobs } = await supabase
       .from('jobber_jobs')
-      .select('revenue, status, end_date')
-      .gte('end_date', actualToday)
-      .lt('end_date', `${actualToday}T23:59:59`)
-      .eq('status', 'archived')
+      .select('revenue, status, end_date, job_number, title, client_name')
+      .gte('end_date', `${actualToday}T00:00:00`)  // Jobs with work completed today
+      .lt('end_date', `${actualToday}T23:59:59`)   // Up to end of today
+      .eq('status', 'archived')  // "Closed" status in Jobber
       .gt('revenue', 0);
 
-    const dailyClosedRevenue = todayCompletedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+    // Try to get real-time data from Jobber API first
+    let dailyClosedRevenue = 0;
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobber/jobs-closed-today`, {
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      if (response.ok) {
+        const jobsData = await response.json();
+        dailyClosedRevenue = jobsData.totalRevenue || 0;
+      } else {
+        // Fallback to local database
+        dailyClosedRevenue = todayClosedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+      }
+    } catch (error) {
+      // Fallback to local database
+      dailyClosedRevenue = todayClosedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+    }
     const dailyGoal = 13000; // Updated to correct $13K goal
 
     const arOutstanding = outstandingInvoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;
@@ -523,12 +557,34 @@ export class DashboardService {
     const over60Total = days61to90 + days90plus;
     const over60Percent = arOutstanding > 0 ? (over60Total / arOutstanding) * 100 : 0;
 
-    // Calculate month-over-month changes
-    const issuedChange = revenueIssuedLastMonth > 0
-      ? ((revenueIssuedMTD - revenueIssuedLastMonth) / revenueIssuedLastMonth) * 100
+    // Calculate day-to-day month-over-month changes
+    // Compare revenue for the same number of days in current month vs last month
+    const currentDayOfMonth = now.getDate();
+
+    // Get data for the same day range in last month (e.g., Sept 1-2 vs Oct 1-2)
+    const lastMonthSameDayEnd = new Date(currentYear, currentMonth - 1, currentDayOfMonth + 1);
+
+    const { data: lastMonthSamePeriodInvoices } = await supabase
+      .from('jobber_invoices')
+      .select('amount, issue_date')
+      .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('issue_date', lastMonthSameDayEnd.toISOString().split('T')[0]);
+
+    const { data: lastMonthSamePeriodPayments } = await supabase
+      .from('jobber_payments')
+      .select('amount, payment_date')
+      .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('payment_date', lastMonthSameDayEnd.toISOString().split('T')[0]);
+
+    const revenueIssuedLastMonthSamePeriod = lastMonthSamePeriodInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0;
+    const revenueCollectedLastMonthSamePeriod = lastMonthSamePeriodPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
+
+    // Calculate percentage changes comparing same day ranges
+    const issuedChange = revenueIssuedLastMonthSamePeriod > 0
+      ? ((revenueIssuedMTD - revenueIssuedLastMonthSamePeriod) / revenueIssuedLastMonthSamePeriod) * 100
       : 0;
-    const paidChange = revenueCollectedLastMonth > 0
-      ? ((revenueCollectedMTD - revenueCollectedLastMonth) / revenueCollectedLastMonth) * 100
+    const paidChange = revenueCollectedLastMonthSamePeriod > 0
+      ? ((revenueCollectedMTD - revenueCollectedLastMonthSamePeriod) / revenueCollectedLastMonthSamePeriod) * 100
       : 0;
 
     // Status calculations
@@ -593,7 +649,12 @@ export class DashboardService {
     };
   }
 
-  private processCallData(calls: any[]) {
+  private processCallData(calls: Array<{
+    classified_as_booked?: boolean;
+    transcript?: string;
+    duration?: number;
+    classification_confidence?: number;
+  }>) {
     const totalCalls = calls?.length || 0;
 
     if (totalCalls === 0) {
@@ -739,7 +800,14 @@ export class DashboardService {
     const supabase = await this.getSupabase();
 
     // Get all jobs for analysis - use pagination to get all records
-    let allJobs: any[] = [];
+    let allJobs: Array<{
+      id?: string;
+      title?: string;
+      description?: string;
+      revenue?: number;
+      client_id?: string;
+      status?: string;
+    }> = [];
     let from = 0;
     const pageSize = 1000;
     let hasMore = true;

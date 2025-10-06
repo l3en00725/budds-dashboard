@@ -1,14 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServiceRoleClient } from '@/lib/supabase';
 
 const QB_SANDBOX_BASE_URL = process.env.QUICKBOOKS_SANDBOX_BASE_URL || 'https://sandbox-quickbooks.api.intuit.com';
-const QB_PRODUCTION_BASE_URL = 'https://quickbooks.api.intuit.com';
 
 // For production, you'd switch this
 const QB_BASE_URL = QB_SANDBOX_BASE_URL;
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('quickbooks_access_token')?.value;
@@ -21,7 +20,6 @@ export async function GET(request: NextRequest) {
     // Calculate date ranges
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
-    const lastYear = currentYear - 1;
 
     // YTD: January 1 to today
     const ytdStart = `${currentYear}-01-01`;
@@ -97,9 +95,9 @@ async function fetchProfitLossReport(
   if (report && report.Rows) {
     // Look for the "Total Income" line in the report
     for (const row of report.Rows) {
-      if (row.group === 'Income' || row.ColData?.some((col: any) => col.value?.includes('Total Income'))) {
+      if (row.group === 'Income' || row.ColData?.some((col: { value?: string }) => col.value?.includes('Total Income'))) {
         // Find the total column (usually the last ColData item)
-        const totalCol = row.ColData?.find((col: any) =>
+        const totalCol = row.ColData?.find((col: { value?: string }) =>
           col.value && !isNaN(parseFloat(col.value.replace(/[,$]/g, '')))
         );
 

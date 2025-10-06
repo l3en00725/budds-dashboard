@@ -195,10 +195,8 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
             total
             subtotal
             tax
-            outstandingAmount
             issuedDate
             dueDate
-            status
             createdAt
             client {
               id
@@ -233,10 +231,10 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
           amount: invoice.total || 0,
           subtotal: invoice.subtotal || 0,
           tax: invoice.tax || 0,
-          balance: invoice.outstandingAmount || 0,
+          balance: invoice.total || 0, // Use total as placeholder for balance since outstandingAmount doesn't exist
           issue_date: invoice.issuedDate,
           due_date: invoice.dueDate,
-          status: invoice.status?.toLowerCase() || 'unknown',
+          status: 'issued', // Default status since field doesn't exist
           client_id: invoice.client?.id,
           client_name: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() ||
                        invoice.client?.companyName || 'Unknown',
@@ -270,7 +268,7 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
   while (hasNextPage) {
     const query = `
       query GetPayments($first: Int, $after: String) {
-        payments(first: $first, after: $after) {
+        paymentRecords(first: $first, after: $after) {
           nodes {
             id
             amount
@@ -298,7 +296,7 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
 
     const variables = { first: 50, after: cursor };
     const response = await makeJobberRequest(query, variables, request);
-    const payments = response.data?.payments?.nodes || [];
+    const payments = response.data?.paymentRecords?.nodes || [];
 
     console.log(`Processing ${payments.length} payments...`);
 
@@ -325,8 +323,8 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
       }
     }
 
-    hasNextPage = response.data?.payments?.pageInfo?.hasNextPage || false;
-    cursor = response.data?.payments?.pageInfo?.endCursor;
+    hasNextPage = response.data?.paymentRecords?.pageInfo?.hasNextPage || false;
+    cursor = response.data?.paymentRecords?.pageInfo?.endCursor;
 
     if (hasNextPage) {
       console.log('Waiting 2 seconds between payment pages...');
