@@ -13,11 +13,13 @@ import * as Sentry from '@sentry/nextjs';
 const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber.com/api/graphql';
 
 async function syncJobberHandler(request: NextRequest) {
-  try {
-    const supabase = createServiceRoleClient();
+  const supabase = createServiceRoleClient();
+  let totalRecordsSynced = 0;
+  let syncLog: any = null;
 
+  try {
     // Log sync start
-    const { data: syncLog } = await supabase
+    const { data } = await supabase
       .from('sync_log')
       .insert({
         sync_type: 'jobber_full_sync',
@@ -27,7 +29,7 @@ async function syncJobberHandler(request: NextRequest) {
       .select()
       .single();
 
-    let totalRecordsSynced = 0;
+    syncLog = data;
 
     try {
       // Get stored Jobber token
@@ -56,12 +58,12 @@ async function syncJobberHandler(request: NextRequest) {
           records_synced: totalRecordsSynced,
           completed_at: new Date().toISOString(),
         })
-        .eq('id', syncLog.id);
+        .eq('id', syncLog?.id);
 
       return NextResponse.json({
         success: true,
         recordsSynced: totalRecordsSynced,
-        syncId: syncLog.id,
+        syncId: syncLog?.id,
       });
     } catch (error) {
       // Update sync log with error
@@ -72,7 +74,7 @@ async function syncJobberHandler(request: NextRequest) {
           error_message: error instanceof Error ? error.message : 'Unknown error',
           completed_at: new Date().toISOString(),
         })
-        .eq('id', syncLog.id);
+        .eq('id', syncLog?.id);
 
       throw error;
     }
@@ -462,8 +464,8 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
   let cursor = null;
 
   const query = `
-    query GetInvoices($first: Int, $after: String, $createdAtGte: DateTime) {
-      invoices(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetInvoices($first: Int, $after: String, $updatedAtGte: DateTime) {
+      invoices(first: $first, after: $after, filter: { updatedAtGte: $updatedAtGte }) {
         nodes {
           id
           invoiceNumber
@@ -494,7 +496,7 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
   while (hasNextPage) {
     // Set historical date to September 1st, 2025 for accurate financial data
     const historicalDate = '2025-09-01T00:00:00Z';
-    const data = await makeJobberRequest(query, { first: 50, after: cursor, createdAtGte: historicalDate }, request);
+    const data = await makeJobberRequest(query, { first: 50, after: cursor, updatedAtGte: historicalDate }, request);
     const invoices = data.invoices.nodes;
 
     for (const invoice of invoices) {
