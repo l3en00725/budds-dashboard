@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Validate state against the stored cookie using next/headers
+  // Validate state against the stored cookie using cookies()
   const cookieStore = await cookies();
   const storedState = cookieStore.get('jobber_oauth_state')?.value;
 

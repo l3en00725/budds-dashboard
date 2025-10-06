@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { randomBytes } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -27,9 +26,11 @@ export async function GET() {
 
   console.log('Generated OAuth URL:', authUrl.toString().replace(state, '[STATE_REDACTED]'));
 
-  // Set httpOnly cookie with CSRF state using next/headers
-  const cookieStore = await cookies();
-  cookieStore.set('jobber_oauth_state', state, {
+  // Create response with redirect
+  const response = NextResponse.redirect(authUrl.toString());
+
+  // Set httpOnly cookie with CSRF state using NextResponse.cookies
+  response.cookies.set('jobber_oauth_state', state, {
     httpOnly: true,
     secure: true,
     sameSite: 'none',
@@ -37,6 +38,5 @@ export async function GET() {
     path: '/',
   });
 
-  // Create response with redirect
-  return NextResponse.redirect(authUrl.toString());
+  return response;
 }
