@@ -307,12 +307,15 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
           continue;
         }
 
+        // Normalize status for dashboard consistency - map Jobber statuses to consistent values
+        const normalizedStatus = ['complete', 'invoiced'].includes(jobStatus.toLowerCase()) ? 'archived' : jobStatus.toLowerCase();
+
         const jobData = {
           job_id: job.id,
           job_number: job.jobNumber || null,
           title: job.title || 'Untitled Job',
           description: null, // Field not available in API
-          status: jobStatus,
+          status: normalizedStatus,
           invoiced: isCompleted,
           revenue: revenue,
           client_id: job.client?.id || null,

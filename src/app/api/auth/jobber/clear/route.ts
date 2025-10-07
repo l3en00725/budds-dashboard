@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   const response = NextResponse.json({
     message: 'Jobber cookies cleared. You can now re-authenticate.',
-    nextStep: 'Go to http://localhost:3000/api/auth/jobber/login'
+    nextStep: `Go to ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/jobber/login`
   });
 
   // Clear all Jobber-related cookies

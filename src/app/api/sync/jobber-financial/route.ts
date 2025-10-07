@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
+import { getOAuthToken } from '@/lib/oauth-tokens';
 
 const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber.com/api/graphql';
 
@@ -105,6 +106,14 @@ async function getJobberToken(request: NextRequest): Promise<string | null> {
         // TODO: Store the new tokens back in cookies for future requests
         return tokenData.access_token;
       }
+    }
+
+    // Fallback to stored service tokens in database
+    console.log('No cookie tokens available, checking stored service tokens...');
+    const storedToken = await getOAuthToken('jobber');
+    if (storedToken) {
+      console.log('Using stored Jobber service token');
+      return storedToken;
     }
 
     return null;

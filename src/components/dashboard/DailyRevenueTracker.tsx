@@ -170,14 +170,6 @@ export function DailyRevenueTracker({ data }: DailyRevenueTrackerProps) {
             <div className="text-xs text-gray-500">Last updated</div>
             <div className="text-sm text-gray-300">{formatTime(todayData.lastUpdate)}</div>
           </div>
-          <button
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="p-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 transition-colors disabled:opacity-50"
-            title="Manual refresh"
-          >
-            <RefreshCw className={`h-4 w-4 text-gray-300 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
         </div>
       </div>
 

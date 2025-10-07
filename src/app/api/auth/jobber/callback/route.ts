@@ -161,6 +161,16 @@ export async function GET(request: NextRequest) {
       maxAge: tokenData.expires_in || 7200,
     });
 
+    // Store refresh token in secure, HTTP-only cookie
+    if (tokenData.refresh_token) {
+      response.cookies.set('jobber_refresh_token', tokenData.refresh_token, {
+        httpOnly: true, // Secure server-side only access
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
+      });
+    }
+
     // OAuth state already cleaned up during validation
 
     console.log('OAuth flow completed successfully, redirecting to dashboard');
