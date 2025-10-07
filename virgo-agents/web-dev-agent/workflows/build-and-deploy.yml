@@ -1,0 +1,384 @@
+# Build and Deploy Workflow
+# Streamlined workflow for building and deploying Astro sites to Vercel with comprehensive testing
+
+name: "Build and Deploy Workflow"
+version: "2.0.0"
+description: "Automated build, test, and deployment pipeline for Astro + Sanity websites"
+
+workflow:
+  stages:
+    - stage: "pre_build"
+      description: "Environment setup and dependency management"
+      duration: "5 minutes"
+      tasks:
+        - environment_validation:
+            node_version: ">=18.0.0"
+            npm_version: ">=8.0.0"
+            required_env_vars:
+              - "SANITY_PROJECT_ID"
+              - "SANITY_DATASET"
+              - "SANITY_API_TOKEN"
+              - "NEXT_PUBLIC_SITE_URL"
+        - dependency_installation:
+            command: "npm ci --frozen-lockfile"
+            cache_strategy: "aggressive"
+            security_audit: true
+        - code_quality:
+            linting: "npm run lint"
+            type_checking: "npm run type-check"
+            formatting: "npm run format:check"
+      outputs:
+        - environment_status: "object"
+        - dependency_tree: "object"
+        - quality_report: "object"
+      validation:
+        - all_dependencies_installed: true
+        - no_security_vulnerabilities: true
+        - code_quality_passed: true
+
+    - stage: "build"
+      description: "Build optimized production assets"
+      duration: "3-5 minutes"
+      dependencies: ["pre_build"]
+      tasks:
+        - asset_optimization:
+            image_compression: true
+            webp_conversion: true
+            responsive_variants: true
+        - content_generation:
+            sanity_fetch: true
+            static_generation: true
+            sitemap_creation: true
+        - build_execution:
+            command: "npm run build"
+            optimization_level: "production"
+            bundle_analysis: true
+        - post_build_validation:
+            bundle_size_check: true
+            dead_code_elimination: true
+            asset_fingerprinting: true
+      outputs:
+        - build_artifacts: "directory"
+        - bundle_report: "object"
+        - asset_manifest: "object"
+        - build_metrics: "object"
+      validation:
+        - build_successful: true
+        - bundle_size_acceptable: "< 2MB"
+        - no_build_warnings: true
+
+    - stage: "testing"
+      description: "Comprehensive testing suite"
+      duration: "5-10 minutes"
+      dependencies: ["build"]
+      parallel_execution: true
+      tasks:
+        - unit_testing:
+            framework: "vitest"
+            coverage_threshold: 80
+            component_tests: true
+        - integration_testing:
+            api_endpoints: true
+            form_submissions: true
+            cms_integration: true
+        - performance_testing:
+            lighthouse_ci: true
+            core_web_vitals: true
+            bundle_analysis: true
+        - accessibility_testing:
+            axe_testing: true
+            wcag_compliance: true
+            screen_reader: true
+        - seo_testing:
+            meta_tags: true
+            schema_validation: true
+            sitemap_validation: true
+      outputs:
+        - test_results: "object"
+        - coverage_report: "object"
+        - performance_report: "object"
+        - accessibility_report: "object"
+        - seo_report: "object"
+      validation:
+        - all_tests_passed: true
+        - coverage_threshold_met: true
+        - performance_targets_met: true
+        - accessibility_compliant: true
+
+    - stage: "staging_deployment"
+      description: "Deploy to staging environment"
+      duration: "2-3 minutes"
+      dependencies: ["testing"]
+      tasks:
+        - staging_preparation:
+            environment: "staging"
+            subdomain: "staging-${project_name}.vercel.app"
+            environment_variables:
+              NODE_ENV: "staging"
+              ROBOTS_NOINDEX: "true"
+        - deployment_execution:
+            platform: "vercel"
+            build_command: "npm run build"
+            output_directory: "dist"
+            node_version: "18.x"
+        - post_deployment_verification:
+            health_check: true
+            smoke_tests: true
+            integration_verification: true
+      outputs:
+        - staging_url: "string"
+        - deployment_id: "string"
+        - health_status: "object"
+      validation:
+        - staging_accessible: true
+        - health_checks_passed: true
+        - basic_functionality_working: true
+
+    - stage: "staging_validation"
+      description: "Comprehensive staging environment testing"
+      duration: "10-15 minutes"
+      dependencies: ["staging_deployment"]
+      tasks:
+        - functional_testing:
+            page_load_testing: true
+            form_functionality: true
+            navigation_testing: true
+            responsive_design: true
+        - cross_browser_testing:
+            browsers: ["chrome", "firefox", "safari", "edge"]
+            mobile_devices: ["ios_safari", "android_chrome"]
+        - performance_validation:
+            real_user_metrics: true
+            lighthouse_audit: true
+            core_web_vitals: true
+        - content_verification:
+            cms_content_loading: true
+            image_optimization: true
+            seo_elements: true
+        - security_testing:
+            ssl_verification: true
+            security_headers: true
+            vulnerability_scan: true
+      outputs:
+        - validation_report: "object"
+        - browser_compatibility: "object"
+        - performance_metrics: "object"
+        - security_report: "object"
+      validation:
+        - all_pages_functional: true
+        - cross_browser_compatible: true
+        - performance_acceptable: true
+        - security_compliant: true
+
+    - stage: "production_deployment"
+      description: "Deploy to production environment"
+      duration: "3-5 minutes"
+      dependencies: ["staging_validation"]
+      approval_required: true
+      tasks:
+        - pre_production_checks:
+            staging_validation_passed: true
+            approval_received: true
+            backup_verified: true
+        - production_preparation:
+            custom_domain: "${project_domain}"
+            ssl_certificate: "automatic"
+            environment_variables:
+              NODE_ENV: "production"
+              ROBOTS_NOINDEX: "false"
+        - deployment_execution:
+            strategy: "blue_green"
+            rollback_capability: true
+            zero_downtime: true
+        - dns_configuration:
+            domain_verification: true
+            ssl_activation: true
+            cdn_setup: true
+      outputs:
+        - production_url: "string"
+        - deployment_id: "string"
+        - ssl_status: "object"
+        - cdn_config: "object"
+      validation:
+        - production_accessible: true
+        - ssl_active: true
+        - dns_propagated: true
+
+    - stage: "post_deployment"
+      description: "Post-deployment monitoring and validation"
+      duration: "5-10 minutes"
+      dependencies: ["production_deployment"]
+      tasks:
+        - immediate_validation:
+            site_accessibility: true
+            ssl_verification: true
+            basic_functionality: true
+        - monitoring_setup:
+            uptime_monitoring: true
+            performance_monitoring: true
+            error_tracking: true
+            analytics_verification: true
+        - seo_validation:
+            search_console_submission: true
+            sitemap_submission: true
+            schema_validation: true
+        - notification_dispatch:
+            slack_notification: true
+            email_summary: true
+            client_notification: true
+      outputs:
+        - monitoring_config: "object"
+        - seo_submission_status: "object"
+        - notification_status: "object"
+      validation:
+        - monitoring_active: true
+        - seo_configured: true
+        - notifications_sent: true
+
+# Environment Configurations
+environments:
+  development:
+    node_env: "development"
+    build_command: "npm run build:dev"
+    optimization_level: "minimal"
+    source_maps: true
+    hot_reload: true
+
+  staging:
+    node_env: "staging"
+    build_command: "npm run build"
+    optimization_level: "full"
+    source_maps: false
+    robots_noindex: true
+    subdomain_pattern: "staging-{project}.vercel.app"
+
+  production:
+    node_env: "production"
+    build_command: "npm run build"
+    optimization_level: "maximum"
+    source_maps: false
+    robots_noindex: false
+    custom_domain: true
+    ssl_required: true
+
+# Build Optimization
+build_config:
+  astro:
+    output: "static"
+    adapter: "@astrojs/vercel/static"
+    build_options:
+      minify: true
+      sourcemap: false
+      assets:
+        prefix: "/assets/"
+
+  performance:
+    image_optimization:
+      formats: ["webp", "avif", "png", "jpg"]
+      quality: 80
+      responsive: true
+
+    bundle_optimization:
+      code_splitting: true
+      tree_shaking: true
+      compression: "gzip"
+
+    caching:
+      static_assets: "1y"
+      html_pages: "1h"
+      api_responses: "5m"
+
+# Testing Configuration
+testing:
+  unit_tests:
+    framework: "vitest"
+    coverage_threshold: 80
+    test_pattern: "**/*.test.{js,ts}"
+
+  integration_tests:
+    framework: "playwright"
+    browsers: ["chromium", "firefox", "webkit"]
+    test_pattern: "**/*.spec.{js,ts}"
+
+  performance_tests:
+    lighthouse_ci:
+      performance: 90
+      accessibility: 90
+      best_practices: 90
+      seo: 90
+
+  accessibility_tests:
+    axe_core: true
+    wcag_level: "AA"
+
+# Quality Gates
+quality_gates:
+  pre_build:
+    - dependencies_secure: true
+    - code_quality_passed: true
+    - environment_valid: true
+
+  build:
+    - build_successful: true
+    - bundle_size_acceptable: true
+    - no_build_errors: true
+
+  testing:
+    - unit_tests_passed: true
+    - integration_tests_passed: true
+    - performance_targets_met: true
+    - accessibility_compliant: true
+
+  staging:
+    - staging_accessible: true
+    - functional_tests_passed: true
+    - cross_browser_compatible: true
+
+  production:
+    - approval_received: true
+    - staging_validation_passed: true
+    - backup_verified: true
+
+# Monitoring and Alerting
+monitoring:
+  uptime:
+    provider: "vercel"
+    check_interval: "1m"
+    timeout: "10s"
+
+  performance:
+    provider: "vercel_speed_insights"
+    core_web_vitals: true
+    real_user_monitoring: true
+
+  errors:
+    provider: "vercel_functions"
+    error_tracking: true
+    performance_monitoring: true
+
+  notifications:
+    slack:
+      channels: ["#deployments", "#alerts"]
+      events: ["deployment_success", "deployment_failure", "performance_degradation"]
+
+    email:
+      recipients: ["dev-team@virgo.com"]
+      events: ["critical_errors", "deployment_failure"]
+
+# Rollback Strategy
+rollback:
+  triggers:
+    - deployment_failure: "automatic"
+    - critical_errors: "automatic"
+    - performance_degradation: "manual"
+    - client_request: "manual"
+
+  strategy:
+    method: "vercel_instant_rollback"
+    max_rollback_time: "30s"
+    notification_required: true
+
+  validation:
+    post_rollback_checks: true
+    functionality_verification: true
+    performance_validation: true
