@@ -1,15 +1,62 @@
 'use client';
 
+import { useState } from 'react';
 import { Phone, PhoneCall, TrendingUp, Clock, AlertTriangle, CheckCircle } from "lucide-react";
 import { DashboardMetrics } from "@/lib/dashboard-service";
+import { CallDetailsModal } from './CallDetailsModal';
 
 interface CallAnalyticsWidgetProps {
   data: DashboardMetrics['callAnalytics'];
 }
 
 export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalData, setModalData] = useState<{
+    title: string;
+    calls: any[];
+    color: 'purple' | 'emerald' | 'red' | 'blue' | 'amber';
+  }>({ title: '', calls: [], color: 'purple' });
+  const [loading, setLoading] = useState(false);
+
   const conversionRate = data.today.totalCalls > 0 ? Math.round((data.today.appointmentsBooked / data.today.totalCalls) * 100) : 0;
   const positiveRate = data.today.totalCalls > 0 ? Math.round((data.today.positivesentiment / data.today.totalCalls) * 100) : 0;
+
+  const fetchCallDetails = async (category: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/calls/by-category?category=${category}&date=today`);
+      const result = await response.json();
+
+      let title = '';
+      let color: 'purple' | 'emerald' | 'red' | 'blue' | 'amber' = 'purple';
+
+      switch (category) {
+        case 'booked':
+          title = 'Appointments Booked';
+          color = 'emerald';
+          break;
+        case 'emergency':
+          title = 'Emergency Calls';
+          color = 'red';
+          break;
+        case 'followup':
+          title = 'Follow-ups Scheduled';
+          color = 'blue';
+          break;
+        case 'total':
+          title = 'All Calls Today';
+          color = 'purple';
+          break;
+      }
+
+      setModalData({ title, calls: result.calls || [], color });
+      setModalOpen(true);
+    } catch (error) {
+      console.error('Error fetching call details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (percentage: number) => {
     if (percentage >= 70) return 'text-emerald-600 bg-emerald-50';
@@ -54,32 +101,44 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
         <h4 className="text-sm font-semibold gradient-text mb-3">Today's Performance</h4>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Calls */}
-          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+          <button
+            onClick={() => fetchCallDetails('total')}
+            className="text-center p-3 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
+          >
             <PhoneCall className="h-5 w-5 text-purple-600 mx-auto mb-1" />
             <div className="text-xl font-bold gradient-text">{data.today.totalCalls}</div>
             <div className="text-xs gradient-text">Total Calls</div>
-          </div>
+          </button>
 
           {/* Appointments Booked */}
-          <div className="text-center p-3 rounded-xl bg-emerald-50">
+          <button
+            onClick={() => fetchCallDetails('booked')}
+            className="text-center p-3 rounded-xl bg-emerald-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
+          >
             <CheckCircle className="h-5 w-5 text-emerald-600 mx-auto mb-1" />
             <div className="text-xl font-bold text-emerald-700">{data.today.appointmentsBooked}</div>
             <div className="text-xs text-emerald-600">Appointments</div>
-          </div>
+          </button>
 
           {/* Emergency Calls */}
-          <div className="text-center p-3 rounded-xl bg-red-50">
+          <button
+            onClick={() => fetchCallDetails('emergency')}
+            className="text-center p-3 rounded-xl bg-red-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
+          >
             <AlertTriangle className="h-5 w-5 text-red-600 mx-auto mb-1" />
             <div className="text-xl font-bold text-red-700">{data.today.emergencyCallsToday}</div>
             <div className="text-xs text-red-600">Emergency</div>
-          </div>
+          </button>
 
           {/* Follow-ups */}
-          <div className="text-center p-3 rounded-xl bg-blue-50">
+          <button
+            onClick={() => fetchCallDetails('followup')}
+            className="text-center p-3 rounded-xl bg-blue-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
+          >
             <Clock className="h-5 w-5 text-blue-600 mx-auto mb-1" />
             <div className="text-xl font-bold text-blue-700">{data.today.followUpsScheduled}</div>
             <div className="text-xs text-blue-600">Follow-ups</div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -221,6 +280,15 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
           </div>
         </div>
       )}
+
+      {/* Call Details Modal */}
+      <CallDetailsModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalData.title}
+        calls={modalData.calls}
+        categoryColor={modalData.color}
+      />
     </div>
   );
 }
