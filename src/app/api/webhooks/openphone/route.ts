@@ -8,6 +8,8 @@ export async function POST(request: NextRequest) {
     const payload = await request.json();
 
     console.log('OpenPhone webhook received:', JSON.stringify(payload, null, 2));
+    console.log('Payload event type:', payload.event || payload.type);
+    console.log('Payload data:', payload.data);
 
     // Verify webhook authenticity (OpenPhone may send signature headers)
     const signature = request.headers.get('x-openphone-signature');
@@ -17,17 +19,24 @@ export async function POST(request: NextRequest) {
 
     // Handle call completed and transcript events
     if (payload.event === 'call.completed' || payload.type === 'call.completed' ||
-        payload.event === 'call.transcript.completed' || payload.type === 'call.transcript.completed') {
+        payload.event === 'call.transcript.completed' || payload.type === 'call.transcript.completed' ||
+        payload.event === 'test' || !payload.event) {
       const callData = payload.data || payload;
+
+      // Generate a unique ID for test webhooks or empty payloads
+      const timestamp = Date.now();
+      const callId = callData.id || callData.callId || `openphone-test-${timestamp}`;
+
+      console.log('Extracted call_id:', callId);
 
       // Extract call information - handle different payload structures
       const callInfo = {
-        call_id: callData.id || callData.callId || `openphone-${Date.now()}`,
-        caller_number: callData.from || callData.participants?.[0]?.phoneNumber || 'Unknown',
+        call_id: callId,
+        caller_number: callData.from || callData.phoneNumber || callData.participants?.[0]?.phoneNumber || '+15550000000',
         direction: callData.direction || 'inbound',
         duration: callData.duration || 0,
         call_date: callData.createdAt || callData.startedAt || callData.completedAt || new Date().toISOString(),
-        transcript: callData.transcript || callData.transcription?.text || null,
+        transcript: callData.transcript || callData.transcription?.text || 'Test webhook - no transcript',
       };
 
       // Get enhanced classification with sales intelligence
