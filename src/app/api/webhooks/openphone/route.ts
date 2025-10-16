@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
     if (payload.event === 'call.completed' || payload.type === 'call.completed' ||
         payload.event === 'call.transcript.completed' || payload.type === 'call.transcript.completed' ||
         payload.event === 'test' || !payload.event) {
-      const callData = payload.data || payload;
+
+      // OpenPhone nests data under data.object for some events
+      const callData = payload.data?.object || payload.data || payload;
 
       // Generate a unique ID for test webhooks or empty payloads
       const timestamp = Date.now();
@@ -29,14 +31,26 @@ export async function POST(request: NextRequest) {
 
       console.log('Extracted call_id:', callId);
 
+      // Extract transcript from callTranscript.dialogue if available
+      let transcript = callData.transcript || callData.transcription?.text;
+      if (!transcript && callData.callTranscript?.dialogue) {
+        // Combine all dialogue into a single transcript
+        transcript = callData.callTranscript.dialogue
+          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
+          .join('\n');
+      }
+      if (!transcript) {
+        transcript = 'Test webhook - no transcript';
+      }
+
       // Extract call information - handle different payload structures
       const callInfo = {
         call_id: callId,
         caller_number: callData.from || callData.phoneNumber || callData.participants?.[0]?.phoneNumber || '+15550000000',
-        direction: callData.direction || 'inbound',
-        duration: callData.duration || 0,
-        call_date: callData.createdAt || callData.startedAt || callData.completedAt || new Date().toISOString(),
-        transcript: callData.transcript || callData.transcription?.text || 'Test webhook - no transcript',
+        direction: callData.direction === 'incoming' ? 'inbound' : (callData.direction || 'inbound'),
+        duration: callData.callTranscript?.duration || callData.duration || 0,
+        call_date: callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString(),
+        transcript: transcript,
       };
 
       // Get enhanced classification with sales intelligence
