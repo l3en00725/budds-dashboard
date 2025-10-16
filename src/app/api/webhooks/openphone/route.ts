@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Get event type from payload
-    const eventType = payload.event || payload.type;
+    // Get event type from payload - OpenPhone sends it in different locations
+    const eventType = payload.object?.type || payload.event || payload.type;
 
     // Filter out SMS events - will be tracked separately in future SMS Analytics feature
     if (eventType === 'message.received' || eventType === 'message.delivered') {
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
         eventType === 'call.summary.completed' || eventType === 'call.recording.completed' ||
         eventType === 'test' || !eventType) {
 
-      // OpenPhone nests data under data.object for some events
-      const callData = payload.data?.object || payload.data || payload;
+      // OpenPhone nests data under different structures depending on API version
+      const callData = payload.object?.data?.object || payload.data?.object || payload.data || payload;
 
       // Generate a unique ID for test webhooks or empty payloads
       const timestamp = Date.now();
