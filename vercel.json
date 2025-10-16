@@ -7,10 +7,6 @@
     {
       "path": "/api/sync/quickbooks",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/sync/openphone",
-      "schedule": "0 3 * * *"
     }
   ]
 }
