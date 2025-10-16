@@ -6,7 +6,7 @@ export default async function Home() {
   const hasJobberToken = cookieStore.get('jobber_access_token');
   const hasQuickBooksToken = cookieStore.get('quickbooks_access_token');
 
-  if (hasJobberToken && hasQuickBooksToken) {
+  if (hasJobberToken) {
     redirect('/dashboard');
   }
 
@@ -14,10 +14,10 @@ export default async function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold gradient-text mb-2">
             Plumbing & HVAC Dashboard
           </h1>
-          <p className="text-gray-600 mb-8">
+          <p className="text-lg gradient-text mb-8">
             Real-time accountability metrics for your business
           </p>
 
@@ -71,8 +71,8 @@ export default async function Home() {
           </div>
 
           <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="font-medium text-gray-900 mb-3">Dashboard Features:</h3>
-            <ul className="text-sm text-gray-600 space-y-1 text-left">
+            <h3 className="font-medium gradient-text mb-3">Dashboard Features:</h3>
+            <ul className="text-sm gradient-text space-y-1 text-left">
               <li>• Daily revenue target tracking</li>
               <li>• Unsent invoices monitoring</li>
               <li>• Open quotes management</li>

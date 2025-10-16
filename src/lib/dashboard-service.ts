@@ -385,34 +385,34 @@ export class DashboardService {
       .eq('status', 'archived');
 
     // Get invoices for revenue calculations
-    const { data: invoicesThisMonth } = await supabase
+    const { data: invoicesThisMonthFull } = await supabase
       .from('jobber_invoices')
       .select('invoice_id, amount, balance, issue_date, status')
       .gte('issue_date', startOfMonth.toISOString().split('T')[0]);
 
-    const { data: invoicesLastMonth } = await supabase
+    const { data: invoicesLastMonthFull } = await supabase
       .from('jobber_invoices')
       .select('invoice_id, amount, balance, issue_date, status')
       .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
       .lt('issue_date', startOfMonth.toISOString().split('T')[0]);
 
     // Get payments for collection calculations
-    const { data: paymentsThisMonth } = await supabase
+    const { data: paymentsThisMonthFull } = await supabase
       .from('jobber_payments')
       .select('payment_id, amount, payment_date')
       .gte('payment_date', startOfMonth.toISOString().split('T')[0]);
 
-    const { data: paymentsLastMonth } = await supabase
+    const { data: paymentsLastMonthFull } = await supabase
       .from('jobber_payments')
       .select('payment_id, amount, payment_date')
       .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
       .lt('payment_date', startOfMonth.toISOString().split('T')[0]);
 
     // Get today's invoices for daily revenue
-    const { data: todayInvoices } = await supabase
+    const { data: dailyInvoices } = await supabase
       .from('jobber_invoices')
       .select('invoice_id, amount, issue_date, status')
-      .eq('issue_date', today);
+      .eq('issue_date', this.getTodayString());
 
     // Get all outstanding invoices for AR aging
     const { data: outstandingInvoices } = await supabase
@@ -479,17 +479,24 @@ export class DashboardService {
     const revenueCollectedMTD = currentMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
     const revenueCollectedLastMonth = lastMonthPayments?.reduce((sum, pay) => sum + (pay.amount || 0), 0) || 0;
 
-    // Get jobs completed TODAY only for daily revenue (use actual current date)
-    const actualToday = new Date().toISOString().split('T')[0];
-    const { data: todayCompletedJobs } = await supabase
-      .from('jobber_jobs')
-      .select('revenue, status, end_date')
-      .gte('end_date', actualToday)
-      .lt('end_date', `${actualToday}T23:59:59`)
-      .eq('status', 'archived')
-      .gt('revenue', 0);
+    // CORRECT Daily Closed Revenue = Total value of jobs closed today
+    // Since Jobber's API doesn't expose invoice outstanding balances, we use job totals
+    // for jobs that were marked as complete/closed today
+    const todayString = new Date().toISOString().split('T')[0];
 
-    const dailyClosedRevenue = todayCompletedJobs?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+    const { data: closedJobsToday } = await supabase
+      .from('jobber_jobs')
+      .select('revenue, job_number')
+      .in('status', ['complete', 'archived', 'closed'])
+      .gte('end_date', todayString);
+
+    const dailyClosedRevenue = closedJobsToday?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
+
+    console.log('🔍 DEBUG - Daily closed revenue calculation:', {
+      jobsClosedToday: closedJobsToday?.length || 0,
+      totalRevenue: dailyClosedRevenue,
+      jobNumbers: closedJobsToday?.map(j => j.job_number) || []
+    });
     const dailyGoal = 13000; // Updated to correct $13K goal
 
     const arOutstanding = outstandingInvoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0;

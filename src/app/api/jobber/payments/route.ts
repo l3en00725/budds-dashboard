@@ -3,17 +3,14 @@ import { cookies } from 'next/headers';
 
 const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber.com/api/graphql';
 
-const GET_PAYMENTS_QUERY = `
-  query GetPayments($first: Int, $after: String, $filter: PaymentFilter) {
-    payments(first: $first, after: $after, filter: $filter) {
+const GET_PAYMENT_RECORDS_QUERY = `
+  query GetPaymentRecords($first: Int, $after: String, $filter: InvoiceFilter) {
+    invoices(first: $first, after: $after, filter: $filter) {
       nodes {
         id
-        amount
-        paymentDate
-        paymentMethod
-        memo
+        invoiceNumber
+        total
         createdAt
-        updatedAt
         client {
           id
           firstName
@@ -24,14 +21,21 @@ const GET_PAYMENTS_QUERY = `
             isPrimary
           }
         }
-        invoice {
+        job {
           id
-          invoiceNumber
-          total
-          job {
+          jobNumber
+          title
+        }
+        paymentRecords {
+          nodes {
             id
-            jobNumber
-            title
+            amount
+            receivedOn
+            createdAt
+            updatedAt
+            paymentMethod {
+              name
+            }
           }
         }
       }
@@ -60,18 +64,19 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
+    // Use invoice creation date as filter since payment records are nested
     let filter = {};
     if (startDate && endDate) {
       filter = {
-        paymentDate: {
-          greaterThanOrEqualTo: startDate,
-          lessThanOrEqualTo: endDate,
+        createdAt: {
+          after: startDate,
+          before: endDate,
         },
       };
     } else if (startDate) {
       filter = {
-        paymentDate: {
-          greaterThanOrEqualTo: startDate,
+        createdAt: {
+          after: startDate,
         },
       };
     }
@@ -81,10 +86,10 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
-        'X-JOBBER-GRAPHQL-VERSION': '2023-03-15',
+        'X-JOBBER-GRAPHQL-VERSION': '2025-01-20',
       },
       body: JSON.stringify({
-        query: GET_PAYMENTS_QUERY,
+        query: GET_PAYMENT_RECORDS_QUERY,
         variables: { first, after, filter },
       }),
     });
@@ -100,7 +105,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'GraphQL errors', details: data.errors }, { status: 400 });
     }
 
-    return NextResponse.json(data.data);
+    // Extract payment records from invoices and format them like the old payments response
+    const invoices = data.data.invoices.nodes;
+    const payments = [];
+
+    for (const invoice of invoices) {
+      for (const paymentRecord of invoice.paymentRecords?.nodes || []) {
+        // Filter by payment date if specified
+        if (startDate || endDate) {
+          const paymentDate = new Date(paymentRecord.receivedOn || paymentRecord.createdAt);
+          const start = startDate ? new Date(startDate) : null;
+          const end = endDate ? new Date(endDate) : null;
+
+          if (start && paymentDate < start) continue;
+          if (end && paymentDate > end) continue;
+        }
+
+        payments.push({
+          id: paymentRecord.id,
+          amount: paymentRecord.amount,
+          paymentDate: paymentRecord.receivedOn,
+          paymentMethod: paymentRecord.paymentMethod?.name || 'Unknown',
+          memo: null, // Not available in paymentRecords
+          createdAt: paymentRecord.createdAt,
+          updatedAt: paymentRecord.updatedAt,
+          client: invoice.client,
+          invoice: {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            job: invoice.job
+          }
+        });
+      }
+    }
+
+    // Return in the same format as the original payments query
+    return NextResponse.json({
+      payments: {
+        nodes: payments,
+        pageInfo: data.data.invoices.pageInfo
+      }
+    });
   } catch (error) {
     console.error('Error fetching payments:', error);
     return NextResponse.json({ error: 'Failed to fetch payments' }, { status: 500 });

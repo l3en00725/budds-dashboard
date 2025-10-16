@@ -3,25 +3,25 @@ import { DashboardContent } from '@/components/dashboard/DashboardContent';
 
 export default function DashboardPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Modern Header */}
-      <div className="bg-white/70 backdrop-blur-sm border-b border-gray-200/50 sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
+      {/* Modern Purple Header */}
+      <div className="bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 backdrop-blur-sm border-b border-white/20 sticky top-0 z-10 shadow-lg">
+        <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-lg">B</span>
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30">
+                <span className="text-white font-bold text-2xl gradient-text">B</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-bold text-white gradient-text mb-1">
                   Budd's Dashboard
                 </h1>
-                <p className="text-sm text-gray-500">Plumbing & HVAC Operations</p>
+                <p className="text-sm text-white/90">Plumbing & HVAC Operations</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-600 font-medium">Live</span>
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/50"></div>
+              <span className="text-sm text-white font-semibold">Live</span>
             </div>
           </div>
         </div>
@@ -30,8 +30,8 @@ export default function DashboardPage() {
       {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Business Overview</h2>
-          <p className="text-gray-600">Real-time insights into your operations and performance</p>
+          <h2 className="text-2xl font-bold gradient-text mb-2">Business Overview</h2>
+          <p className="text-lg gradient-text">Real-time insights into your operations and performance</p>
         </div>
 
         <Suspense fallback={<DashboardSkeleton />}>

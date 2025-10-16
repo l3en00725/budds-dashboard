@@ -31,10 +31,10 @@ export function ExecutiveDashboard({ metrics }: ExecutiveDashboardProps) {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
       {/* Header */}
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-4">
+        <h1 className="text-4xl font-bold gradient-text mb-4">
           Executive Dashboard
         </h1>
-        <p className="text-gray-300 text-lg">
+        <p className="text-white/90 text-lg gradient-text">
           Key Performance Indicators & Business Intelligence
         </p>
       </div>

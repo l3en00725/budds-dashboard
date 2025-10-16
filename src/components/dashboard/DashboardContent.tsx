@@ -196,7 +196,7 @@ export function DashboardContent() {
         <button
           onClick={syncJobberData}
           disabled={syncing}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 shadow-lg transition-all duration-200 transform hover:scale-105"
+          className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 shadow-lg transition-all duration-200 transform hover:scale-105"
         >
           {syncing ? (
             <>
@@ -225,8 +225,8 @@ export function DashboardContent() {
         <div className="relative mb-8">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-1 h-6 bg-gradient-to-b from-purple-600 to-pink-600 rounded-full"></div>
-            <h2 className="text-xl font-bold text-gray-900">Membership Program</h2>
-            <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent"></div>
+            <h2 className="text-xl font-bold gradient-text">Membership Program</h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-purple-300 via-pink-300 to-transparent"></div>
           </div>
           <MembershipCard membershipData={metrics.gmMetrics.membershipRevenue} />
         </div>
@@ -234,9 +234,9 @@ export function DashboardContent() {
         {/* Call Intelligence */}
         <div className="relative">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-6 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-full"></div>
-            <h2 className="text-xl font-bold text-gray-900">Call Intelligence</h2>
-            <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent"></div>
+            <div className="w-1 h-6 bg-gradient-to-b from-purple-600 to-pink-600 rounded-full"></div>
+            <h2 className="text-xl font-bold gradient-text">Call Intelligence</h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-purple-300 via-pink-300 to-transparent"></div>
           </div>
           <CallAnalyticsWidget data={metrics.callAnalytics} />
         </div>

@@ -2,6 +2,36 @@
 
 ## Critical Implementation Notes for Future Dashboard Agents
 
+### 0. ⚠️ CRITICAL BUSINESS METRIC DEFINITIONS ⚠️
+
+#### **Daily Closed Revenue Definition:**
+**Daily Closed Revenue = Total outstanding balance of invoices for jobs that were closed/completed today**
+
+This is NOT:
+- ❌ Total outstanding across all invoices
+- ❌ Revenue from invoices created today
+- ❌ Job revenue amounts from completed jobs
+
+This IS:
+- ✅ Jobs closed today (status = complete/archived/closed AND end_date = today)
+- ✅ Get invoices associated with those jobs
+- ✅ Sum the outstanding `balance` field of those invoices
+
+**Implementation Logic:**
+```sql
+-- Find jobs closed today
+jobs WHERE status IN ('complete', 'archived', 'closed')
+  AND end_date >= '2024-XX-XX'
+
+-- Get invoices for those jobs
+invoices WHERE job_id IN (closed_jobs_today)
+
+-- Sum outstanding balances
+SUM(invoices.balance WHERE balance > 0)
+```
+
+**Business Context:** When you close a job, you want to see how much money is still owed from those newly completed jobs.
+
 ### 1. Jobber OAuth Integration Issues & Solutions
 
 #### ❌ Common OAuth Pitfalls:

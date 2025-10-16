@@ -35,29 +35,29 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-50">
-            <Phone className="h-5 w-5 text-blue-600" />
+          <div className="p-2 rounded-lg bg-gradient-to-br from-purple-100 to-pink-100">
+            <Phone className="h-5 w-5 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Today's Call Intelligence</h3>
-            <p className="text-sm text-gray-500">AI-powered call analysis</p>
+            <h3 className="font-semibold gradient-text text-xl">Today's Call Intelligence</h3>
+            <p className="text-sm gradient-text">AI-powered call analysis</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-xs text-gray-600">Live AI</span>
+          <span className="text-xs gradient-text">Live AI</span>
         </div>
       </div>
 
       {/* Today's Metrics */}
       <div className="mb-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">Today's Performance</h4>
+        <h4 className="text-sm font-semibold gradient-text mb-3">Today's Performance</h4>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Calls */}
-          <div className="text-center p-3 rounded-xl bg-gray-50">
-            <PhoneCall className="h-5 w-5 text-gray-600 mx-auto mb-1" />
-            <div className="text-xl font-bold text-gray-900">{data.today.totalCalls}</div>
-            <div className="text-xs text-gray-500">Total Calls</div>
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+            <PhoneCall className="h-5 w-5 text-purple-600 mx-auto mb-1" />
+            <div className="text-xl font-bold gradient-text">{data.today.totalCalls}</div>
+            <div className="text-xs gradient-text">Total Calls</div>
           </div>
 
           {/* Appointments Booked */}
@@ -136,7 +136,7 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
 
       {/* Weekly Trends */}
       <div className="mb-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">This Week vs Last Week</h4>
+        <h4 className="text-sm font-semibold gradient-text mb-3">This Week vs Last Week</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Total Calls Trend */}
           <div className="p-4 rounded-xl border border-gray-200">
@@ -193,7 +193,7 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
 
       {/* Pipeline Breakdown */}
       <div>
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Sales Pipeline Breakdown</h4>
+        <h4 className="text-sm font-medium gradient-text mb-3">Sales Pipeline Breakdown</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {pipelineData.map((item, index) => (
             <div key={index} className="text-center p-3 rounded-lg border border-gray-100">

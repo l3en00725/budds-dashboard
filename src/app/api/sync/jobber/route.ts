@@ -528,14 +528,14 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
   let hasNextPage = true;
   let cursor = null;
 
+  // Get payment records through invoices since direct 'payments' query doesn't exist
   const query = `
-    query GetPayments($first: Int, $after: String, $createdAtGte: DateTime) {
-      payments(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetInvoicePaymentRecords($first: Int, $after: String, $createdAtGte: DateTime) {
+      invoices(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
         nodes {
           id
-          amount
-          paymentDate
-          paymentMethod
+          invoiceNumber
+          total
           createdAt
           client {
             id
@@ -543,8 +543,20 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
             lastName
             companyName
           }
-          invoice {
+          job {
             id
+          }
+          paymentRecords {
+            nodes {
+              id
+              amount
+              receivedOn
+              createdAt
+              updatedAt
+              paymentMethod {
+                name
+              }
+            }
           }
         }
         pageInfo {
@@ -556,28 +568,39 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
   `;
 
   while (hasNextPage) {
-    // Set historical date to September 1st, 2025 for accurate financial data
-    const historicalDate = '2025-09-01T00:00:00Z';
-    const data = await makeJobberRequest(query, { first: 50, after: cursor, createdAtGte: historicalDate }, request);
-    const payments = data.payments.nodes;
-
-    for (const payment of payments) {
-      await supabase.from('jobber_payments').upsert({
-        payment_id: payment.id,
-        customer: `${payment.client?.firstName || ''} ${payment.client?.lastName || ''}`.trim() || payment.client?.companyName,
-        client_id: payment.client?.id,
-        invoice_id: payment.invoice?.id,
-        amount: payment.amount || 0,
-        payment_date: payment.paymentDate,
-        payment_method: payment.paymentMethod,
-        created_at_jobber: payment.createdAt,
-        pulled_at: new Date().toISOString(),
-      });
-      recordsSynced++;
+    // Add delay between requests
+    if (cursor) {
+      console.log('Waiting 3 seconds between payment record requests...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
-    hasNextPage = data.payments.pageInfo.hasNextPage;
-    cursor = data.payments.pageInfo.endCursor;
+    // Set historical date to September 1st, 2025 for accurate financial data
+    const historicalDate = '2025-09-01T00:00:00Z';
+    const data = await makeJobberRequest(query, { first: 30, after: cursor, createdAtGte: historicalDate }, request);
+    const invoices = data.invoices.nodes;
+
+    console.log(`Processing payment records from ${invoices.length} invoices (batch ${Math.floor(recordsSynced / 30) + 1})...`);
+
+    // Extract payment records from invoices
+    for (const invoice of invoices) {
+      for (const paymentRecord of invoice.paymentRecords?.nodes || []) {
+        await supabase.from('jobber_payments').upsert({
+          payment_id: paymentRecord.id,
+          customer: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() || invoice.client?.companyName,
+          client_id: invoice.client?.id,
+          invoice_id: invoice.id,
+          amount: paymentRecord.amount || 0,
+          payment_date: paymentRecord.receivedOn,
+          payment_method: paymentRecord.paymentMethod?.name || 'Unknown',
+          created_at_jobber: paymentRecord.createdAt,
+          pulled_at: new Date().toISOString(),
+        });
+        recordsSynced++;
+      }
+    }
+
+    hasNextPage = data.invoices.pageInfo.hasNextPage;
+    cursor = data.invoices.pageInfo.endCursor;
   }
 
   return recordsSynced;

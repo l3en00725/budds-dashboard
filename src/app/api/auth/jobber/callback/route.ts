@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID!;
 const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET!;
 const JOBBER_REDIRECT_URI = process.env.JOBBER_REDIRECT_URI!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -42,6 +45,30 @@ export async function GET(request: NextRequest) {
 
     const tokenData = await tokenResponse.json();
     console.log('Token exchange response:', tokenData);
+
+    // === SAVE TOKENS TO SUPABASE DATABASE FOR PIPEDREAM ACCESS ===
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+    // Calculate expiration date
+    const expiresInSeconds = tokenData.expires_in || 3600;
+    const expiresAt = new Date(Date.now() + (expiresInSeconds * 1000));
+
+    try {
+      await supabase
+        .from('jobber_tokens')
+        .upsert({
+          id: 1, // Single token record
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          expires_at: expiresAt.toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      console.log('✅ Token saved successfully to database for Pipedream access');
+    } catch (dbError) {
+      console.error('❌ Failed to save token to database:', dbError);
+      // Continue anyway - don't break the OAuth flow
+    }
 
     // Store the access token (you might want to encrypt this)
     const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);

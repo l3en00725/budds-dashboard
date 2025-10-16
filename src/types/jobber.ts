@@ -37,6 +37,19 @@ export interface JobberLineItem {
   total: number;
 }
 
+export interface JobberPaymentMethod {
+  name: string;
+}
+
+export interface JobberPaymentRecord {
+  id: string;
+  amount: number;
+  receivedOn: string;
+  createdAt: string;
+  updatedAt: string;
+  paymentMethod?: JobberPaymentMethod;
+}
+
 export interface JobberInvoice {
   id: string;
   invoiceNumber: string;
@@ -50,6 +63,25 @@ export interface JobberInvoice {
   total: number;
   balance: number;
   lineItems: JobberLineItem[];
+  paymentRecords?: {
+    nodes: JobberPaymentRecord[];
+  };
+}
+
+export interface JobberPayment {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  createdAt: string;
+  updatedAt: string;
+  client: JobberClient;
+  invoice?: {
+    id: string;
+    invoiceNumber: string;
+    total: number;
+    job?: JobberJob;
+  };
 }
 
 export interface DashboardMetrics {

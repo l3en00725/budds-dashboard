@@ -37,8 +37,8 @@ export default function MembershipCard({ membershipData }: MembershipCardProps) 
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Users className="h-5 w-5 text-blue-600" />
+        <CardTitle className="text-lg font-semibold flex items-center gap-2 gradient-text">
+          <Users className="h-5 w-5 text-purple-600" />
           Active Memberships
         </CardTitle>
       </CardHeader>
@@ -73,16 +73,16 @@ export default function MembershipCard({ membershipData }: MembershipCardProps) 
 
         {/* Total Count */}
         <div className="pt-3 border-t border-gray-200">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-blue-100">
-                <Users className="h-5 w-5 text-blue-600" />
+              <div className="p-2 rounded-full bg-purple-100">
+                <Users className="h-5 w-5 text-purple-600" />
               </div>
-              <span className="font-semibold text-gray-800">
+              <span className="font-semibold gradient-text">
                 Total Members
               </span>
             </div>
-            <Badge className="bg-blue-600 text-white font-bold text-lg px-4 py-2">
+            <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg px-4 py-2">
               {membershipData.totalCount}
             </Badge>
           </div>

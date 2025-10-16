@@ -1,0 +1,177 @@
+{
+  "name": "jobber-dashboard",
+  "version": "1.0.0",
+  "description": "AI analytics and call classification dashboard for Jobber operators. Integrates OpenPhone transcription analysis, Jobber/QuickBooks revenue tracking, and automated reporting.",
+  "model": "claude-3.5-sonnet",
+  "sub_models": {
+    "report-writer": "claude-3.5-sonnet",
+    "transcription-classifier": "claude-3.5-sonnet"
+  },
+  "architecture": {
+    "root_agent": "orchestrator",
+    "agents": {
+      "orchestrator": {
+        "description": "Routes analytics and transcription tasks to the correct specialized agent based on task_type.",
+        "sub_agents": [
+          "openphone-analyzer",
+          "sync-specialist",
+          "revenue-analytics",
+          "report-writer"
+        ],
+        "routing_logic": {
+          "transcription_review": "openphone-analyzer",
+          "sync_diagnostics": "sync-specialist",
+          "financial_summary": "revenue-analytics",
+          "report_output": "report-writer"
+        }
+      },
+      "openphone-analyzer": {
+        "description": "Classifies OpenPhone calls as booked, emergency, missed, or irrelevant using Claude AI. Analyzes transcripts and extracts booking intent, customer needs, and follow-up requirements.",
+        "mcp": ["openphone_api"],
+        "tools": ["anthropic_claude"],
+        "trigger_conditions": ["task_type:transcription_review"],
+        "classification_types": [
+          "booked",
+          "emergency",
+          "missed_opportunity",
+          "spam",
+          "irrelevant"
+        ],
+        "confidence_threshold": 0.75
+      },
+      "sync-specialist": {
+        "description": "Data collection & API integration specialist. Diagnoses sync failures, optimizes GraphQL queries, handles pagination and rate limiting. Prevents slow syncs, API errors, and data transformation issues.",
+        "mcp": ["jobber_api", "openphone_api", "quickbooks_mcp"],
+        "trigger_conditions": ["task_type:sync_diagnostics", "task_type:api_debug"],
+        "expertise": [
+          "OAuth token management",
+          "API pagination and rate limiting",
+          "GraphQL query optimization",
+          "Webhook configuration",
+          "Error diagnosis and retry logic"
+        ],
+        "supported_integrations": [
+          "Jobber (GraphQL)",
+          "OpenPhone (REST)",
+          "QuickBooks (REST)"
+        ]
+      },
+      "revenue-analytics": {
+        "description": "Aggregates Jobber and QuickBooks data for revenue metrics, conversion rates, AR aging, and business KPIs. Calculates daily goals, MTD comparisons, and growth trends.",
+        "mcp": ["jobber_api", "quickbooks_mcp"],
+        "trigger_conditions": ["task_type:financial_summary", "task_type:kpi_analysis"],
+        "metrics": [
+          "daily_revenue",
+          "mtd_issued",
+          "mtd_collected",
+          "ar_aging",
+          "completion_rate",
+          "jobs_per_tech",
+          "growth_trends"
+        ],
+        "data_sources": {
+          "jobber": ["jobs", "invoices", "payments", "line_items"],
+          "quickbooks": ["revenue", "expenses", "profit_loss"]
+        }
+      },
+      "report-writer": {
+        "description": "Generates summary reports and dashboard insights for Slack or Web. Creates executive summaries, trend analysis, and actionable recommendations.",
+        "tools": ["web", "file_search"],
+        "trigger_conditions": ["task_type:report_output"],
+        "output_formats": [
+          "slack_message",
+          "dashboard_json",
+          "pdf_report",
+          "csv_export"
+        ],
+        "report_types": [
+          "daily_summary",
+          "weekly_review",
+          "monthly_executive",
+          "call_analytics",
+          "revenue_forecast"
+        ]
+      }
+    }
+  },
+  "integrations": {
+    "openphone": {
+      "api_base": "https://api.openphone.com/v1",
+      "auth_type": "api_key",
+      "endpoints": {
+        "calls": "/calls",
+        "transcriptions": "/calls/{id}/transcription",
+        "webhooks": "/webhooks"
+      },
+      "webhook_events": [
+        "call.completed",
+        "call.transcribed"
+      ]
+    },
+    "jobber": {
+      "api_base": "https://api.getjobber.com/api/graphql",
+      "auth_type": "oauth2",
+      "api_version": "2025-01-20",
+      "entities": ["jobs", "invoices", "payments", "clients", "quotes"]
+    },
+    "quickbooks": {
+      "api_base": "https://quickbooks.api.intuit.com",
+      "auth_type": "oauth2",
+      "endpoints": {
+        "query": "/v3/company/{companyId}/query",
+        "reports": "/v3/company/{companyId}/reports"
+      }
+    }
+  },
+  "database": {
+    "provider": "supabase",
+    "url": "https://gthftbdmschwpjjqhyhm.supabase.co",
+    "tables": {
+      "openphone_calls": {
+        "columns": [
+          "id",
+          "call_id",
+          "caller_number",
+          "direction",
+          "duration",
+          "transcript",
+          "classified_as_booked",
+          "classification_confidence",
+          "call_date",
+          "pulled_at"
+        ]
+      },
+      "jobs": ["id", "job_number", "title", "status", "revenue", "end_date"],
+      "invoices": ["id", "job_id", "amount", "balance", "status", "issued_date"],
+      "payments": ["id", "invoice_id", "amount", "payment_date", "method"],
+      "sync_logs": ["id", "sync_type", "status", "records_synced", "synced_at"]
+    }
+  },
+  "environment": {
+    "required_vars": [
+      "OPENPHONE_API_KEY",
+      "JOBBER_CLIENT_ID",
+      "JOBBER_CLIENT_SECRET",
+      "QUICKBOOKS_CLIENT_ID",
+      "QUICKBOOKS_CLIENT_SECRET",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "ANTHROPIC_API_KEY"
+    ]
+  },
+  "sync_config": {
+    "openphone": {
+      "method": "webhook",
+      "fallback_polling": "*/30 * * * *",
+      "lookback_days": 3
+    },
+    "jobber": {
+      "method": "polling",
+      "schedule": "0 1 * * *",
+      "pagination_size": 50
+    },
+    "quickbooks": {
+      "method": "polling",
+      "schedule": "0 2 * * *"
+    }
+  }
+}

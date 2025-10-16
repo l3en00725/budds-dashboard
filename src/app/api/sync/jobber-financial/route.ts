@@ -142,10 +142,20 @@ async function refreshJobberToken(refreshToken: string): Promise<{ access_token:
 }
 
 async function makeJobberRequest(query: string, variables: any, request: NextRequest) {
-  const token = await getJobberToken(request);
-  if (!token) {
-    throw new Error('No Jobber token available');
+  const supabase = createServiceRoleClient();
+
+  // Get Jobber token from database (like the jobs sync)
+  const { data: tokenRow, error: tokenErr } = await supabase
+    .from('jobber_tokens')
+    .select('access_token')
+    .eq('id', 1)
+    .single();
+
+  if (tokenErr || !tokenRow?.access_token) {
+    throw new Error('No Jobber token available in database. Please run Jobber OAuth first.');
   }
+
+  const token = tokenRow.access_token;
 
   const response = await fetch(JOBBER_API_URL, {
     method: 'POST',
@@ -195,10 +205,8 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
             total
             subtotal
             tax
-            outstandingAmount
             issuedDate
             dueDate
-            status
             createdAt
             client {
               id
@@ -233,10 +241,10 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
           amount: invoice.total || 0,
           subtotal: invoice.subtotal || 0,
           tax: invoice.tax || 0,
-          balance: invoice.outstandingAmount || 0,
+          balance: invoice.total || 0, // Use total as balance since outstandingAmount not available
           issue_date: invoice.issuedDate,
           due_date: invoice.dueDate,
-          status: invoice.status?.toLowerCase() || 'unknown',
+          status: 'issued', // Default status since not available from API
           client_id: invoice.client?.id,
           client_name: `${invoice.client?.firstName || ''} ${invoice.client?.lastName || ''}`.trim() ||
                        invoice.client?.companyName || 'Unknown',
@@ -313,12 +321,11 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
           amount: payment.amount || 0,
           payment_date: payment.paymentDate,
           payment_method: payment.paymentMethod || 'unknown',
-          status: 'completed', // Payments don't have status field in this schema
           invoice_id: payment.invoice?.id,
           invoice_number: payment.invoice?.invoiceNumber,
           client_id: payment.client?.id,
-          client_name: `${payment.client?.firstName || ''} ${payment.client?.lastName || ''}`.trim() ||
-                       payment.client?.companyName || 'Unknown',
+          customer: `${payment.client?.firstName || ''} ${payment.client?.lastName || ''}`.trim() ||
+                    payment.client?.companyName || 'Unknown',
           pulled_at: new Date().toISOString()
         });
         recordsProcessed++;
