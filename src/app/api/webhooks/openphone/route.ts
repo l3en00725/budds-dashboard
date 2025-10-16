@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         call_id: callId,
         caller_number: callData.from || callData.phoneNumber || callData.participants?.[0]?.phoneNumber || '+15550000000',
         direction: callData.direction === 'incoming' ? 'inbound' : (callData.direction || 'inbound'),
-        duration: callData.callTranscript?.duration || callData.duration || 0,
+        duration: Math.round(callData.callTranscript?.duration || callData.duration || 0), // Round to integer (OpenPhone sends decimals)
         call_date: callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString(),
         transcript: transcript,
       };
@@ -62,24 +62,51 @@ export async function POST(request: NextRequest) {
       );
 
       // Store call data using only existing schema fields
-      const { data: insertData, error: insertError } = await supabase.from('openphone_calls').upsert({
+      const callRecord = {
         call_id: callInfo.call_id,
         caller_number: callInfo.caller_number,
         direction: callInfo.direction,
-        duration: callInfo.duration,
+        duration: callInfo.duration, // Already rounded above
         call_date: callInfo.call_date,
         transcript: callInfo.transcript,
         classified_as_booked: classification.bookable_opportunity,
         classification_confidence: classification.confidence_score / 100,
         pulled_at: new Date().toISOString(),
-      });
+      };
+
+      // Check if call already exists to decide between insert or update
+      const { data: existingCall } = await supabase
+        .from('openphone_calls')
+        .select('id')
+        .eq('call_id', callInfo.call_id)
+        .maybeSingle();
+
+      let insertError;
+      if (existingCall) {
+        // Update existing record (for subsequent webhook events like transcript.completed, summary.completed)
+        console.log(`Updating existing call ${callInfo.call_id} with new data`);
+        const { error } = await supabase
+          .from('openphone_calls')
+          .update(callRecord)
+          .eq('call_id', callInfo.call_id);
+        insertError = error;
+      } else {
+        // Insert new record (for first webhook event like call.completed)
+        console.log(`Inserting new call ${callInfo.call_id}`);
+        const { error } = await supabase
+          .from('openphone_calls')
+          .insert(callRecord);
+        insertError = error;
+      }
 
       if (insertError) {
-        console.error('Database insertion error:', insertError);
+        console.error('Database operation error:', insertError);
+        console.error('Call record:', callRecord);
         return NextResponse.json(
           {
             error: 'Failed to save call data',
             details: insertError.message,
+            call_id: callInfo.call_id,
             classification: classification
           },
           { status: 500 }
