@@ -15,18 +15,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Handle call completed events
-    if (payload.event === 'call.completed' || payload.type === 'call.completed') {
+    // Handle call completed and transcript events
+    if (payload.event === 'call.completed' || payload.type === 'call.completed' ||
+        payload.event === 'call.transcript.completed' || payload.type === 'call.transcript.completed') {
       const callData = payload.data || payload;
 
-      // Extract call information
+      // Extract call information - handle different payload structures
       const callInfo = {
-        call_id: callData.id,
-        caller_number: callData.from || callData.participants?.[0]?.phoneNumber,
-        direction: callData.direction,
+        call_id: callData.id || callData.callId || `openphone-${Date.now()}`,
+        caller_number: callData.from || callData.participants?.[0]?.phoneNumber || 'Unknown',
+        direction: callData.direction || 'inbound',
         duration: callData.duration || 0,
-        call_date: callData.createdAt || callData.startedAt || new Date().toISOString(),
-        transcript: callData.transcript || null,
+        call_date: callData.createdAt || callData.startedAt || callData.completedAt || new Date().toISOString(),
+        transcript: callData.transcript || callData.transcription?.text || null,
       };
 
       // Get enhanced classification with sales intelligence
