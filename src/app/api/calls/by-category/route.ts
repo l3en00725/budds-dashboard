@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase';
+import { getTodayStartET, getTomorrowStartET } from '@/lib/timezone-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,17 +10,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Get today's date range in Eastern Time
-    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Get today's date range in Eastern Time using utility functions
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
 
     let query = supabase
       .from('openphone_calls')
       .select('*')
-      .gte('call_date', today.toISOString())
-      .lt('call_date', tomorrow.toISOString())
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString())
       .order('call_date', { ascending: false });
 
     // Filter by category

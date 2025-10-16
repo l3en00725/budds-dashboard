@@ -1,5 +1,12 @@
 import { createServerComponentClient } from './supabase';
 import { Database } from './supabase';
+import {
+  getTodayStringET,
+  getTodayStartET,
+  getTomorrowStartET,
+  getWeekStartET,
+  getWeekStartStringET
+} from './timezone-utils';
 
 type JobberJob = Database['public']['Tables']['jobber_jobs']['Row'];
 type JobberQuote = Database['public']['Tables']['jobber_quotes']['Row'];
@@ -181,23 +188,15 @@ export class DashboardService {
   }
 
   private getWeekStart(): string {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek.toISOString().split('T')[0];
+    return getWeekStartStringET();
   }
 
   private getWeekStartDate(): Date {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek;
+    return getWeekStartET();
   }
 
   private getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    return getTodayStringET();
   }
 
   async getDaillyTargetProgress(): Promise<DashboardMetrics['dailyTarget']> {
@@ -272,13 +271,14 @@ export class DashboardService {
 
   async getBookedCallPercentage(): Promise<DashboardMetrics['bookedCallPercentage']> {
     const supabase = await this.getSupabase();
-    const today = this.getTodayString();
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
 
     const { data: calls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked')
-      .gte('call_date', today)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString());
 
     const total = calls?.length || 0;
     const booked = calls?.filter(call => call.classified_as_booked).length || 0;
@@ -294,25 +294,26 @@ export class DashboardService {
 
   async getCallAnalytics(): Promise<DashboardMetrics['callAnalytics']> {
     const supabase = await this.getSupabase();
-    const today = this.getTodayString();
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
     const weekStartDate = this.getWeekStartDate();
     const weekStart = weekStartDate.toISOString();
     const lastWeekStart = new Date(weekStartDate.getTime() - 7 * 24 * 60 * 60 * 1000);
     const lastWeekEnd = new Date(weekStartDate.getTime() - 1);
 
-    // Get today's calls using existing schema fields
+    // Get today's calls using existing schema fields (ET timezone)
     const { data: todayCalls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked, classification_confidence, transcript, duration, caller_number')
-      .gte('call_date', today)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString());
 
-    // Get this week's calls
+    // Get this week's calls (ET timezone)
     const { data: thisWeekCalls } = await supabase
       .from('openphone_calls')
       .select('classified_as_booked, classification_confidence, transcript, duration, caller_number')
       .gte('call_date', weekStart)
-      .lt('call_date', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Get last week's calls for comparison
     const { data: lastWeekCalls } = await supabase
