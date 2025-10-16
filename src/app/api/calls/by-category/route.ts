@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Get today's date range
-    const today = new Date();
+    // Get today's date range in Eastern Time
+    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);

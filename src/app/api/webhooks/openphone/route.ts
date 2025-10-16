@@ -17,10 +17,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Handle call completed and transcript events
-    if (payload.event === 'call.completed' || payload.type === 'call.completed' ||
-        payload.event === 'call.transcript.completed' || payload.type === 'call.transcript.completed' ||
-        payload.event === 'test' || !payload.event) {
+    // Get event type from payload
+    const eventType = payload.event || payload.type;
+
+    // Filter out SMS events - will be tracked separately in future SMS Analytics feature
+    if (eventType === 'message.received' || eventType === 'message.delivered') {
+      console.log('Ignoring SMS event:', eventType, 'from', payload.data?.phoneNumber || 'unknown');
+      return NextResponse.json({
+        success: true,
+        message: 'SMS event ignored - will be tracked in future SMS Analytics widget'
+      });
+    }
+
+    // Handle call events only (call.completed, call.transcript.completed, call.summary.completed, etc.)
+    if (eventType === 'call.completed' || eventType === 'call.transcript.completed' ||
+        eventType === 'call.summary.completed' || eventType === 'call.recording.completed' ||
+        eventType === 'test' || !eventType) {
 
       // OpenPhone nests data under data.object for some events
       const callData = payload.data?.object || payload.data || payload;
