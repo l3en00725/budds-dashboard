@@ -187,9 +187,19 @@ If AI fails, keyword matching provides basic classification with 40% confidence.
 
 ## 🐛 Known Issues
 
-### **None Currently** ✅
+### **Active - October 16, 2025:**
+- 🔧 **Timezone Display Issue** (In Progress)
+  - Dashboard showing UTC times (3:12 PM) instead of Eastern Time (11:12 AM ET)
+  - Affecting call timestamps and "today's calls" filtering
+  - Fix in progress: Converting all date operations to Eastern Time
 
-All major issues resolved:
+- 🔧 **SMS Messages Appearing as Calls** (In Progress)
+  - OpenPhone SMS events (`message.received`, `message.delivered`) being processed as calls
+  - Example: 770-415-8949 text message showing in call analytics
+  - Fix in progress: Filtering out SMS events from webhook handler
+  - Future: SMS will be tracked separately in dedicated SMS Analytics widget
+
+### **Previously Resolved:**
 - ✅ OpenPhone webhook 500 errors - **FIXED**
 - ✅ Vercel 401 authentication blocking - **FIXED**
 - ✅ Cron job limits exceeded - **FIXED**
@@ -200,6 +210,14 @@ All major issues resolved:
 ## 📋 Roadmap / Future Enhancements
 
 ### **High Priority:**
+- [ ] **SMS Analytics Dashboard** 📱
+  - Track text messages separately from calls (currently being filtered out)
+  - Show texts received vs texts answered
+  - Response time tracking for SMS
+  - Unanswered message alerts
+  - SMS response rate percentage
+  - Create separate `openphone_messages` table in Supabase
+  - New widget similar to Call Intelligence but for SMS
 - [ ] Add filters for call date ranges (view yesterday's calls)
 - [ ] Export call data to CSV
 - [ ] SMS notifications for emergency calls

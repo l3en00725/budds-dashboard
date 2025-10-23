@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase';
+import { getTodayStartET, getTomorrowStartET } from '@/lib/timezone-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,41 +10,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Get today's date range in EST timezone
-    const getTodayEST = () => {
-      const now = new Date();
-
-      // Convert to EST (America/New_York timezone)
-      const estFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-
-      const parts = estFormatter.formatToParts(now);
-      const year = parts.find(p => p.type === 'year')?.value;
-      const month = parts.find(p => p.type === 'month')?.value;
-      const day = parts.find(p => p.type === 'day')?.value;
-
-      const todayEST = `${year}-${month}-${day}`;
-
-      // Start of day in EST (midnight EST)
-      const startEST = new Date(`${todayEST}T00:00:00-05:00`).toISOString();
-
-      // End of day in EST (11:59:59 PM EST)
-      const endEST = new Date(`${todayEST}T23:59:59-05:00`).toISOString();
-
-      return { start: startEST, end: endEST };
-    };
-
-    const { start: todayStart, end: todayEnd } = getTodayEST();
+    // Get today's date range in Eastern Time using utility functions
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
 
     let query = supabase
       .from('openphone_calls')
       .select('*')
-      .gte('call_date', todayStart)
-      .lte('call_date', todayEnd)
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString())
       .order('call_date', { ascending: false });
 
     // Filter by category

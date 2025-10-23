@@ -1,20 +1,27 @@
-import { createServerComponentClient } from "./supabase";
-import { Database } from "./supabase";
+import { createServerComponentClient } from './supabase';
+import { Database } from './supabase';
+import {
+  getTodayStringET,
+  getTodayStartET,
+  getTomorrowStartET,
+  getWeekStartET,
+  getWeekStartStringET
+} from './timezone-utils';
 
-type JobberJob = Database["public"]["Tables"]["jobber_jobs"]["Row"];
-type JobberQuote = Database["public"]["Tables"]["jobber_quotes"]["Row"];
-type JobberInvoice = Database["public"]["Tables"]["jobber_invoices"]["Row"];
-type JobberPayment = Database["public"]["Tables"]["jobber_payments"]["Row"];
+type JobberJob = Database['public']['Tables']['jobber_jobs']['Row'];
+type JobberQuote = Database['public']['Tables']['jobber_quotes']['Row'];
+type JobberInvoice = Database['public']['Tables']['jobber_invoices']['Row'];
+type JobberPayment = Database['public']['Tables']['jobber_payments']['Row'];
 type QuickBooksRevenue =
-  Database["public"]["Tables"]["quickbooks_revenue_ytd"]["Row"];
-type DashboardTarget = Database["public"]["Tables"]["dashboard_targets"]["Row"];
+  Database['public']['Tables']['quickbooks_revenue_ytd']['Row'];
+type DashboardTarget = Database['public']['Tables']['dashboard_targets']['Row'];
 
 export interface DashboardMetrics {
   dailyTarget: {
     current: number;
     target: number;
     percentage: number;
-    status: "green" | "yellow" | "red";
+    status: 'green' | 'yellow' | 'red';
   };
   gmMetrics: {
     membershipRevenue: {
@@ -42,13 +49,13 @@ export interface DashboardMetrics {
     efficiency: {
       completionRate30d: {
         percentage: number;
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
         completed: number;
         total: number;
       };
       avgJobsPerTechDay7d: {
         average: number;
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
         totalJobs: number;
         techDays: number;
       };
@@ -58,7 +65,7 @@ export interface DashboardMetrics {
         amount: number;
         goal: number;
         percentage: number;
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
       };
       revenueIssuedMTD: {
         amount: number;
@@ -72,10 +79,10 @@ export interface DashboardMetrics {
       };
       arOutstanding: {
         amount: number;
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
       };
       issuedVsPaidMoM: {
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
         issuedChange: number;
         paidChange: number;
       };
@@ -86,14 +93,14 @@ export interface DashboardMetrics {
         days61to90: number;
         days90plus: number;
         over60Percent: number;
-        status: "green" | "orange" | "red";
+        status: 'green' | 'orange' | 'red';
       };
     };
   };
   unsentInvoices: {
     count: number;
     amount: number;
-    status: "green" | "yellow" | "red";
+    status: 'green' | 'yellow' | 'red';
   };
   openQuotes: {
     count: number;
@@ -112,7 +119,7 @@ export interface DashboardMetrics {
     percentage: number;
     booked: number;
     total: number;
-    status: "green" | "yellow" | "red";
+    status: 'green' | 'yellow' | 'red';
   };
   callAnalytics: {
     today: {
@@ -150,7 +157,7 @@ export interface DashboardMetrics {
     current: number;
     target: number;
     percentage: number;
-    status: "green" | "red";
+    status: 'green' | 'red';
     payments: Array<{
       amount: number | null;
       payment_date: string | null;
@@ -161,7 +168,7 @@ export interface DashboardMetrics {
     current: number;
     lastYear: number;
     growth: number;
-    direction: "up" | "down";
+    direction: 'up' | 'down';
   };
 }
 
@@ -182,83 +189,43 @@ export class DashboardService {
   private getStatusColor(
     percentage: number,
     thresholds: { green: number; yellow: number },
-  ): "green" | "yellow" | "red" {
-    if (percentage >= thresholds.green) return "green";
-    if (percentage >= thresholds.yellow) return "yellow";
-    return "red";
+  ): 'green' | 'yellow' | 'red' {
+    if (percentage >= thresholds.green) return 'green';
+    if (percentage >= thresholds.yellow) return 'yellow';
+    return 'red';
   }
 
   private getWeekStart(): string {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek.toISOString().split("T")[0];
+    return getWeekStartStringET();
   }
 
   private getWeekStartDate(): Date {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek;
+    return getWeekStartET();
   }
 
   private getTodayString(): string {
-    // Get today's date in EST timezone
-    const now = new Date();
-    const estOffset = -5 * 60; // EST is UTC-5 (or -4 during DST)
-    const estDate = new Date(now.getTime() + estOffset * 60 * 1000);
-    return estDate.toISOString().split("T")[0];
+    return getTodayStringET();
   }
 
-  private getTodayEST(): { start: string; end: string } {
-    // Get start and end of today in EST timezone
-    const now = new Date();
-
-    // Convert to EST (America/New_York timezone)
-    const estFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-
-    const parts = estFormatter.formatToParts(now);
-    const year = parts.find((p) => p.type === "year")?.value;
-    const month = parts.find((p) => p.type === "month")?.value;
-    const day = parts.find((p) => p.type === "day")?.value;
-
-    const todayEST = `${year}-${month}-${day}`;
-
-    // Start of day in EST (midnight EST)
-    const startEST = new Date(`${todayEST}T00:00:00-05:00`).toISOString();
-
-    // End of day in EST (11:59:59 PM EST)
-    const endEST = new Date(`${todayEST}T23:59:59-05:00`).toISOString();
-
-    return { start: startEST, end: endEST };
-  }
-
-  async getDaillyTargetProgress(): Promise<DashboardMetrics["dailyTarget"]> {
+  async getDaillyTargetProgress(): Promise<DashboardMetrics['dailyTarget']> {
     const supabase = await this.getSupabase();
     const today = this.getTodayString();
 
     // Get jobs completed TODAY only (archived = completed in Jobber)
     const { data: todayJobs } = await supabase
-      .from("jobber_jobs")
-      .select("revenue, status, end_date")
-      .gte("end_date", today)
-      .lt("end_date", `${today}T23:59:59`)
-      .eq("status", "archived")
-      .gt("revenue", 0);
+      .from('jobber_jobs')
+      .select('revenue, status, end_date')
+      .gte('end_date', today)
+      .lt('end_date', `${today}T23:59:59`)
+      .eq('status', 'archived')
+      .gt('revenue', 0);
 
     // Get daily target
     const { data: targets } = await supabase
-      .from("dashboard_targets")
-      .select("target_value")
-      .eq("target_type", "daily_revenue")
-      .eq("period", "daily")
+      .from('dashboard_targets')
+      .select('target_value')
+      .eq('target_type', 'daily_revenue')
+      .eq('period', 'daily')
       .single();
 
     const current =
@@ -274,35 +241,35 @@ export class DashboardService {
     };
   }
 
-  async getUnsentInvoices(): Promise<DashboardMetrics["unsentInvoices"]> {
+  async getUnsentInvoices(): Promise<DashboardMetrics['unsentInvoices']> {
     const supabase = await this.getSupabase();
 
     const { data: invoices } = await supabase
-      .from("jobber_invoices")
-      .select("amount")
-      .eq("status", "draft"); // Unsent invoices
+      .from('jobber_invoices')
+      .select('amount')
+      .eq('status', 'draft'); // Unsent invoices
 
     const count = invoices?.length || 0;
     const amount =
       invoices?.reduce((sum, invoice) => sum + (invoice.amount || 0), 0) || 0;
 
-    let status: "green" | "yellow" | "red" = "green";
-    if (count > 10) status = "red";
-    else if (count >= 5) status = "yellow";
+    let status: 'green' | 'yellow' | 'red' = 'green';
+    if (count > 10) status = 'red';
+    else if (count >= 5) status = 'yellow';
 
     return { count, amount, status };
   }
 
-  async getOpenQuotes(): Promise<DashboardMetrics["openQuotes"]> {
+  async getOpenQuotes(): Promise<DashboardMetrics['openQuotes']> {
     const supabase = await this.getSupabase();
 
     const { data: quotes } = await supabase
-      .from("jobber_quotes")
+      .from('jobber_quotes')
       .select(
-        "id, quote_number, client_name, client_email, client_phone, amount, created_at_jobber",
+        'id, quote_number, client_name, client_email, client_phone, amount, created_at_jobber',
       )
-      .eq("status", "open")
-      .order("created_at_jobber", { ascending: false });
+      .eq('status', 'open')
+      .order('created_at_jobber', { ascending: false });
 
     const count = quotes?.length || 0;
     const amount =
@@ -316,25 +283,26 @@ export class DashboardService {
   }
 
   async getBookedCallPercentage(): Promise<
-    DashboardMetrics["bookedCallPercentage"]
+    DashboardMetrics['bookedCallPercentage']
   > {
     const supabase = await this.getSupabase();
-    const { start, end } = this.getTodayEST();
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
 
     // Get all calls with direction field
     const { data: calls } = await supabase
-      .from("openphone_calls")
-      .select("classified_as_booked, direction")
-      .gte("call_date", start)
-      .lte("call_date", end);
+      .from('openphone_calls')
+      .select('classified_as_booked, direction')
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Only count inbound calls for conversion rate
     const inboundCalls =
       calls?.filter(
         (call) =>
           !call.direction ||
-          call.direction.toLowerCase() === "incoming" ||
-          call.direction.toLowerCase() === "inbound",
+          call.direction.toLowerCase() === 'incoming' ||
+          call.direction.toLowerCase() === 'inbound',
       ) || [];
 
     const total = inboundCalls.length;
@@ -351,9 +319,10 @@ export class DashboardService {
     };
   }
 
-  async getCallAnalytics(): Promise<DashboardMetrics["callAnalytics"]> {
+  async getCallAnalytics(): Promise<DashboardMetrics['callAnalytics']> {
     const supabase = await this.getSupabase();
-    const { start: todayStart, end: todayEnd } = this.getTodayEST();
+    const todayStart = getTodayStartET();
+    const tomorrowStart = getTomorrowStartET();
     const weekStartDate = this.getWeekStartDate();
     const weekStart = weekStartDate.toISOString();
     const lastWeekStart = new Date(
@@ -361,35 +330,32 @@ export class DashboardService {
     );
     const lastWeekEnd = new Date(weekStartDate.getTime() - 1);
 
-    // Get today's calls using new schema fields (EST timezone) - include direction field
+    // Get today's calls using new schema fields (ET timezone) - include direction field
     const { data: todayCalls } = await supabase
-      .from("openphone_calls")
+      .from('openphone_calls')
       .select(
-        "classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction",
+        'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
-      .gte("call_date", todayStart)
-      .lte("call_date", todayEnd);
+      .gte('call_date', todayStart.toISOString())
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Get this week's calls - include direction field
     const { data: thisWeekCalls } = await supabase
-      .from("openphone_calls")
+      .from('openphone_calls')
       .select(
-        "classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction",
+        'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
-      .gte("call_date", weekStart)
-      .lt(
-        "call_date",
-        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      );
+      .gte('call_date', weekStart)
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Get last week's calls for comparison - include direction field
     const { data: lastWeekCalls } = await supabase
-      .from("openphone_calls")
+      .from('openphone_calls')
       .select(
-        "classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction",
+        'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
-      .gte("call_date", lastWeekStart.toISOString())
-      .lt("call_date", lastWeekEnd.toISOString());
+      .gte('call_date', lastWeekStart.toISOString())
+      .lt('call_date', lastWeekEnd.toISOString());
 
     // Process today's data
     const todayData = this.processCallData(todayCalls || []);
@@ -446,7 +412,7 @@ export class DashboardService {
     };
   }
 
-  async getExecutiveMetrics(): Promise<DashboardMetrics["executiveMetrics"]> {
+  async getExecutiveMetrics(): Promise<DashboardMetrics['executiveMetrics']> {
     const supabase = await this.getSupabase();
     const now = new Date();
     const today = this.getTodayString();
@@ -462,58 +428,58 @@ export class DashboardService {
 
     // Get all jobs for efficiency calculations (last 30 days)
     const { data: jobs30d } = await supabase
-      .from("jobber_jobs")
-      .select("job_id, status, start_date, end_date, created_at_jobber")
-      .gte("created_at_jobber", thirtyDaysAgo.toISOString());
+      .from('jobber_jobs')
+      .select('job_id, status, start_date, end_date, created_at_jobber')
+      .gte('created_at_jobber', thirtyDaysAgo.toISOString());
 
     // Get jobs for tech productivity (last 7 days)
     const { data: jobs7d } = await supabase
-      .from("jobber_jobs")
-      .select("job_id, status, start_date, end_date, created_at_jobber")
-      .gte("created_at_jobber", sevenDaysAgo.toISOString())
-      .eq("status", "archived");
+      .from('jobber_jobs')
+      .select('job_id, status, start_date, end_date, created_at_jobber')
+      .gte('created_at_jobber', sevenDaysAgo.toISOString())
+      .eq('status', 'archived');
 
     // Get invoices for revenue calculations
     const { data: invoicesThisMonthFull } = await supabase
-      .from("jobber_invoices")
-      .select("invoice_id, amount, balance, issue_date, status")
-      .gte("issue_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_invoices')
+      .select('invoice_id, amount, balance, issue_date, status')
+      .gte('issue_date', startOfMonth.toISOString().split('T')[0]);
 
     const { data: invoicesLastMonthFull } = await supabase
-      .from("jobber_invoices")
-      .select("invoice_id, amount, balance, issue_date, status")
-      .gte("issue_date", startOfLastMonth.toISOString().split("T")[0])
-      .lt("issue_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_invoices')
+      .select('invoice_id, amount, balance, issue_date, status')
+      .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('issue_date', startOfMonth.toISOString().split('T')[0]);
 
     // Get payments for collection calculations
     const { data: paymentsThisMonthFull } = await supabase
-      .from("jobber_payments")
-      .select("payment_id, amount, payment_date")
-      .gte("payment_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_payments')
+      .select('payment_id, amount, payment_date')
+      .gte('payment_date', startOfMonth.toISOString().split('T')[0]);
 
     const { data: paymentsLastMonthFull } = await supabase
-      .from("jobber_payments")
-      .select("payment_id, amount, payment_date")
-      .gte("payment_date", startOfLastMonth.toISOString().split("T")[0])
-      .lt("payment_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_payments')
+      .select('payment_id, amount, payment_date')
+      .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('payment_date', startOfMonth.toISOString().split('T')[0]);
 
     // Get today's invoices for daily revenue
     const { data: dailyInvoices } = await supabase
-      .from("jobber_invoices")
-      .select("invoice_id, amount, issue_date, status")
-      .eq("issue_date", this.getTodayString());
+      .from('jobber_invoices')
+      .select('invoice_id, amount, issue_date, status')
+      .eq('issue_date', this.getTodayString());
 
     // Get all outstanding invoices for AR aging
     const { data: outstandingInvoices } = await supabase
-      .from("jobber_invoices")
-      .select("invoice_id, amount, balance, issue_date, due_date, status")
-      .neq("status", "paid")
-      .gt("balance", 0);
+      .from('jobber_invoices')
+      .select('invoice_id, amount, balance, issue_date, due_date, status')
+      .neq('status', 'paid')
+      .gt('balance', 0);
 
     // Calculate efficiency metrics
     const totalJobs30d = jobs30d?.length || 0;
     const completedJobs30d =
-      jobs30d?.filter((job) => job.status === "archived").length || 0;
+      jobs30d?.filter((job) => job.status === 'archived').length || 0;
     const completionRate30d =
       totalJobs30d > 0 ? (completedJobs30d / totalJobs30d) * 100 : 0;
 
@@ -525,45 +491,45 @@ export class DashboardService {
     // Calculate revenue metrics - use job revenue since invoices/payments may not be synced
     // Get jobs for this month and last month revenue calculations
     const { data: jobsThisMonth } = await supabase
-      .from("jobber_jobs")
-      .select("revenue, end_date, status")
-      .gte("end_date", startOfMonth.toISOString().split("T")[0])
-      .eq("status", "archived")
-      .gt("revenue", 0);
+      .from('jobber_jobs')
+      .select('revenue, end_date, status')
+      .gte('end_date', startOfMonth.toISOString().split('T')[0])
+      .eq('status', 'archived')
+      .gt('revenue', 0);
 
     const { data: jobsLastMonth } = await supabase
-      .from("jobber_jobs")
-      .select("revenue, end_date, status")
-      .gte("end_date", startOfLastMonth.toISOString().split("T")[0])
-      .lt("end_date", startOfMonth.toISOString().split("T")[0])
-      .eq("status", "archived")
-      .gt("revenue", 0);
+      .from('jobber_jobs')
+      .select('revenue, end_date, status')
+      .gte('end_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('end_date', startOfMonth.toISOString().split('T')[0])
+      .eq('status', 'archived')
+      .gt('revenue', 0);
 
     // Get invoice data for month-over-month calculations
     const { data: currentMonthInvoices } = await supabase
-      .from("jobber_invoices")
-      .select("amount, issue_date")
-      .gte("issue_date", startOfMonth.toISOString().split("T")[0])
-      .lt("issue_date", startOfNextMonth.toISOString().split("T")[0]);
+      .from('jobber_invoices')
+      .select('amount, issue_date')
+      .gte('issue_date', startOfMonth.toISOString().split('T')[0])
+      .lt('issue_date', startOfNextMonth.toISOString().split('T')[0]);
 
     const { data: lastMonthInvoices } = await supabase
-      .from("jobber_invoices")
-      .select("amount, issue_date")
-      .gte("issue_date", startOfLastMonth.toISOString().split("T")[0])
-      .lt("issue_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_invoices')
+      .select('amount, issue_date')
+      .gte('issue_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('issue_date', startOfMonth.toISOString().split('T')[0]);
 
     // Get payment data for month-over-month calculations
     const { data: currentMonthPayments } = await supabase
-      .from("jobber_payments")
-      .select("amount, payment_date")
-      .gte("payment_date", startOfMonth.toISOString().split("T")[0])
-      .lt("payment_date", startOfNextMonth.toISOString().split("T")[0]);
+      .from('jobber_payments')
+      .select('amount, payment_date')
+      .gte('payment_date', startOfMonth.toISOString().split('T')[0])
+      .lt('payment_date', startOfNextMonth.toISOString().split('T')[0]);
 
     const { data: lastMonthPayments } = await supabase
-      .from("jobber_payments")
-      .select("amount, payment_date")
-      .gte("payment_date", startOfLastMonth.toISOString().split("T")[0])
-      .lt("payment_date", startOfMonth.toISOString().split("T")[0]);
+      .from('jobber_payments')
+      .select('amount, payment_date')
+      .gte('payment_date', startOfLastMonth.toISOString().split('T')[0])
+      .lt('payment_date', startOfMonth.toISOString().split('T')[0]);
 
     const revenueIssuedMTD =
       currentMonthInvoices?.reduce((sum, inv) => sum + (inv.amount || 0), 0) ||
@@ -579,18 +545,18 @@ export class DashboardService {
     // CORRECT Daily Closed Revenue = Total value of jobs closed today
     // Since Jobber's API doesn't expose invoice outstanding balances, we use job totals
     // for jobs that were marked as complete/closed today
-    const todayString = new Date().toISOString().split("T")[0];
+    const todayString = new Date().toISOString().split('T')[0];
 
     const { data: closedJobsToday } = await supabase
-      .from("jobber_jobs")
-      .select("revenue, job_number")
-      .in("status", ["complete", "archived", "closed"])
-      .gte("end_date", todayString);
+      .from('jobber_jobs')
+      .select('revenue, job_number')
+      .in('status', ['complete', 'archived', 'closed'])
+      .gte('end_date', todayString);
 
     const dailyClosedRevenue =
       closedJobsToday?.reduce((sum, job) => sum + (job.revenue || 0), 0) || 0;
 
-    console.log("🔍 DEBUG - Daily closed revenue calculation:", {
+    console.log('🔍 DEBUG - Daily closed revenue calculation:', {
       jobsClosedToday: closedJobsToday?.length || 0,
       totalRevenue: dailyClosedRevenue,
       jobNumbers: closedJobsToday?.map((j) => j.job_number) || [],
@@ -678,30 +644,30 @@ export class DashboardService {
     // Status calculations
     const completionStatus =
       completionRate30d >= 90
-        ? "green"
+        ? 'green'
         : completionRate30d >= 75
-          ? "orange"
-          : "red";
+          ? 'orange'
+          : 'red';
     const jobsPerTechStatus =
       avgJobsPerTechDay >= 2.0
-        ? "green"
+        ? 'green'
         : avgJobsPerTechDay >= 1.5
-          ? "orange"
-          : "red";
+          ? 'orange'
+          : 'red';
     const dailyRevenueStatus =
       dailyClosedRevenue >= 12500
-        ? "green"
+        ? 'green'
         : dailyClosedRevenue >= 10000
-          ? "orange"
-          : "red";
+          ? 'orange'
+          : 'red';
     const arStatus =
-      over60Percent <= 15 ? "green" : over60Percent <= 30 ? "orange" : "red";
+      over60Percent <= 15 ? 'green' : over60Percent <= 30 ? 'orange' : 'red';
     const momStatus =
       issuedChange > 0 && paidChange > 0
-        ? "green"
+        ? 'green'
         : issuedChange > 0 || paidChange > 0
-          ? "orange"
-          : "red";
+          ? 'orange'
+          : 'red';
 
     return {
       efficiency: {
@@ -785,16 +751,16 @@ export class DashboardService {
       calls?.filter(
         (call) =>
           !call.direction ||
-          call.direction.toLowerCase() === "incoming" ||
-          call.direction.toLowerCase() === "inbound",
+          call.direction.toLowerCase() === 'incoming' ||
+          call.direction.toLowerCase() === 'inbound',
       ) || [];
 
     const outboundCalls =
       calls?.filter(
         (call) =>
           call.direction &&
-          (call.direction.toLowerCase() === "outgoing" ||
-            call.direction.toLowerCase() === "outbound"),
+          (call.direction.toLowerCase() === 'outgoing' ||
+            call.direction.toLowerCase() === 'outbound'),
       ) || [];
 
     // Only count inbound calls for appointments booked
@@ -804,12 +770,12 @@ export class DashboardService {
 
     // Follow-ups: outbound calls with follow-up keywords
     const followUpKeywords = [
-      "follow up",
-      "check in",
-      "checking in",
-      "confirm satisfaction",
-      "how did",
-      "feedback",
+      'follow up',
+      'check in',
+      'checking in',
+      'confirm satisfaction',
+      'how did',
+      'feedback',
     ];
     const followUpsScheduled = outboundCalls.filter((call) =>
       followUpKeywords.some((keyword) =>
@@ -826,7 +792,7 @@ export class DashboardService {
     const positivesentiment =
       calls?.filter((call) => {
         if (call.sentiment) {
-          return call.sentiment.toLowerCase() === "positive";
+          return call.sentiment.toLowerCase() === 'positive';
         }
         return (
           call.classified_as_booked === true || (call.ai_confidence || 0) > 0.7
@@ -840,15 +806,15 @@ export class DashboardService {
           return call.is_emergency === true;
         }
         // Fallback to transcript keywords
-        const transcript = call.transcript?.toLowerCase() || "";
+        const transcript = call.transcript?.toLowerCase() || '';
         return (
-          transcript.includes("emergency") ||
-          transcript.includes("leak") ||
-          transcript.includes("leaking") ||
-          transcript.includes("flood") ||
-          transcript.includes("flooding") ||
-          transcript.includes("no heat") ||
-          transcript.includes("burst")
+          transcript.includes('emergency') ||
+          transcript.includes('leak') ||
+          transcript.includes('leaking') ||
+          transcript.includes('flood') ||
+          transcript.includes('flooding') ||
+          transcript.includes('no heat') ||
+          transcript.includes('burst')
         );
       }).length || 0;
 
@@ -876,9 +842,9 @@ export class DashboardService {
         (call) => call.classified_as_booked === true,
       ).length,
       followUp: inboundCalls.filter((call) => {
-        const transcript = call.transcript?.toLowerCase() || "";
+        const transcript = call.transcript?.toLowerCase() || '';
         return (
-          transcript.includes("call back") || transcript.includes("follow")
+          transcript.includes('call back') || transcript.includes('follow')
         );
       }).length,
       newLeads: inboundCalls.filter(
@@ -903,7 +869,7 @@ export class DashboardService {
     };
   }
 
-  async getWeeklyPayments(): Promise<DashboardMetrics["weeklyPayments"]> {
+  async getWeeklyPayments(): Promise<DashboardMetrics['weeklyPayments']> {
     const supabase = await this.getSupabase();
     const weekStart = this.getWeekStart();
     const now = new Date();
@@ -911,18 +877,18 @@ export class DashboardService {
 
     // Get this week's payments (Monday to today)
     const { data: payments } = await supabase
-      .from("jobber_payments")
-      .select("amount, payment_date, customer")
-      .gte("payment_date", weekStart)
-      .lte("payment_date", today)
-      .order("payment_date", { ascending: false });
+      .from('jobber_payments')
+      .select('amount, payment_date, customer')
+      .gte('payment_date', weekStart)
+      .lte('payment_date', today)
+      .order('payment_date', { ascending: false });
 
     // Get weekly target
     const { data: targets } = await supabase
-      .from("dashboard_targets")
-      .select("target_value")
-      .eq("target_type", "weekly_payments")
-      .eq("period", "weekly")
+      .from('dashboard_targets')
+      .select('target_value')
+      .eq('target_type', 'weekly_payments')
+      .eq('period', 'weekly')
       .single();
 
     const current =
@@ -939,21 +905,21 @@ export class DashboardService {
       current,
       target,
       percentage,
-      status: onPace ? "green" : "red",
+      status: onPace ? 'green' : 'red',
       payments: payments || [],
     };
   }
 
-  async getYTDRevenue(): Promise<DashboardMetrics["ytdRevenue"]> {
+  async getYTDRevenue(): Promise<DashboardMetrics['ytdRevenue']> {
     const supabase = await this.getSupabase();
     const currentYear = new Date().getFullYear();
 
     try {
       const { data: revenue } = await supabase
-        .from("quickbooks_revenue_ytd")
-        .select("ttm_revenue, ttm_revenue_last_year")
-        .eq("year", currentYear)
-        .order("pulled_at", { ascending: false })
+        .from('quickbooks_revenue_ytd')
+        .select('ttm_revenue, ttm_revenue_last_year')
+        .eq('year', currentYear)
+        .order('pulled_at', { ascending: false })
         .limit(1)
         .single();
 
@@ -965,22 +931,22 @@ export class DashboardService {
         current,
         lastYear,
         growth,
-        direction: growth >= 0 ? "up" : "down",
+        direction: growth >= 0 ? 'up' : 'down',
       };
     } catch (error) {
-      console.error("Error fetching YTD revenue:", error);
+      console.error('Error fetching YTD revenue:', error);
 
       // Return fallback data if QuickBooks data is not available
       return {
         current: 0,
         lastYear: 0,
         growth: 0,
-        direction: "up",
+        direction: 'up',
       };
     }
   }
 
-  async getGMMetrics(): Promise<DashboardMetrics["gmMetrics"]> {
+  async getGMMetrics(): Promise<DashboardMetrics['gmMetrics']> {
     const supabase = await this.getSupabase();
 
     // Get all jobs for analysis - use pagination to get all records
@@ -991,12 +957,12 @@ export class DashboardService {
 
     while (hasMore) {
       const { data: jobs, error } = await supabase
-        .from("jobber_jobs")
-        .select("*")
+        .from('jobber_jobs')
+        .select('*')
         .range(from, from + pageSize - 1);
 
       if (error) {
-        console.error("Error fetching jobs:", error);
+        console.error('Error fetching jobs:', error);
         break;
       }
 
@@ -1044,13 +1010,13 @@ export class DashboardService {
       // Try to get membership data from line items (preferred approach)
       const { data: membershipLineItems, error: lineItemsError } =
         await supabase
-          .from("jobber_line_items")
-          .select("*")
+          .from('jobber_line_items')
+          .select('*')
           .or(
-            "name.ilike.%membership program%,name.ilike.%silver%,name.ilike.%gold%,name.ilike.%platinum%,name.ilike.%budd%,description.ilike.%membership%,description.ilike.%silver%,description.ilike.%gold%,description.ilike.%platinum%,description.ilike.%budd%",
+            'name.ilike.%membership program%,name.ilike.%silver%,name.ilike.%gold%,name.ilike.%platinum%,name.ilike.%budd%,description.ilike.%membership%,description.ilike.%silver%,description.ilike.%gold%,description.ilike.%platinum%,description.ilike.%budd%',
           );
 
-      console.log("Line items query result:", {
+      console.log('Line items query result:', {
         count: membershipLineItems?.length || 0,
         error: lineItemsError,
       });
@@ -1061,29 +1027,29 @@ export class DashboardService {
         const membershipCounts = new Map();
 
         membershipLineItems.forEach((lineItem) => {
-          const name = lineItem.name?.toLowerCase() || "";
-          const desc = lineItem.description?.toLowerCase() || "";
+          const name = lineItem.name?.toLowerCase() || '';
+          const desc = lineItem.description?.toLowerCase() || '';
           const jobId = lineItem.job_id;
 
           // Check for membership types in order of specificity
           if (
-            (name.includes("silver") || desc.includes("silver")) &&
+            (name.includes('silver') || desc.includes('silver')) &&
             !membershipCounts.has(jobId)
           ) {
             silverMembers++;
-            membershipCounts.set(jobId, "silver");
+            membershipCounts.set(jobId, 'silver');
           } else if (
-            (name.includes("gold") || desc.includes("gold")) &&
+            (name.includes('gold') || desc.includes('gold')) &&
             !membershipCounts.has(jobId)
           ) {
             goldMembers++;
-            membershipCounts.set(jobId, "gold");
+            membershipCounts.set(jobId, 'gold');
           } else if (
-            (name.includes("platinum") || desc.includes("platinum")) &&
+            (name.includes('platinum') || desc.includes('platinum')) &&
             !membershipCounts.has(jobId)
           ) {
             platinumMembers++;
-            membershipCounts.set(jobId, "platinum");
+            membershipCounts.set(jobId, 'platinum');
           }
 
           // Add revenue from jobs with membership line items (only once per job)
@@ -1093,65 +1059,65 @@ export class DashboardService {
           }
         });
 
-        console.log("Line items approach - found:", {
+        console.log('Line items approach - found:', {
           silverMembers,
           goldMembers,
           platinumMembers,
         });
       } else {
-        console.log("No line items found, using job title fallback");
-        console.log("Total jobs to analyze (should be 4132):", jobs.length);
+        console.log('No line items found, using job title fallback');
+        console.log('Total jobs to analyze (should be 4132):', jobs.length);
 
         // Fallback to job title approach if no line items available
         const membershipJobs = jobs.filter((job) => {
-          const title = job.title?.toLowerCase() || "";
-          const desc = job.description?.toLowerCase() || "";
+          const title = job.title?.toLowerCase() || '';
+          const desc = job.description?.toLowerCase() || '';
 
           // Look for various membership patterns
           return (
-            title.includes("membership") ||
-            title.includes("silver") ||
-            title.includes("gold") ||
-            title.includes("platinum") ||
-            title.includes("budd's") ||
-            title.includes("budd") ||
-            desc.includes("membership") ||
-            desc.includes("silver") ||
-            desc.includes("gold") ||
-            desc.includes("platinum") ||
-            desc.includes("budd")
+            title.includes('membership') ||
+            title.includes('silver') ||
+            title.includes('gold') ||
+            title.includes('platinum') ||
+            title.includes('budd\'s') ||
+            title.includes('budd') ||
+            desc.includes('membership') ||
+            desc.includes('silver') ||
+            desc.includes('gold') ||
+            desc.includes('platinum') ||
+            desc.includes('budd')
           );
         });
 
-        console.log("Found membership jobs:", membershipJobs.length);
+        console.log('Found membership jobs:', membershipJobs.length);
 
         // Count unique customers by client_id to avoid double-counting
         const uniqueCustomers = new Map();
 
         membershipJobs.forEach((job) => {
-          const title = job.title?.toLowerCase() || "";
-          const desc = job.description?.toLowerCase() || "";
+          const title = job.title?.toLowerCase() || '';
+          const desc = job.description?.toLowerCase() || '';
           const clientId = job.client_id;
 
           if (!clientId) return; // Skip jobs without client ID
 
           // Determine membership tier (prioritize platinum > gold > silver)
-          let tier = "general";
-          if (title.includes("platinum") || desc.includes("platinum")) {
-            tier = "platinum";
-          } else if (title.includes("gold") || desc.includes("gold")) {
-            tier = "gold";
-          } else if (title.includes("silver") || desc.includes("silver")) {
-            tier = "silver";
+          let tier = 'general';
+          if (title.includes('platinum') || desc.includes('platinum')) {
+            tier = 'platinum';
+          } else if (title.includes('gold') || desc.includes('gold')) {
+            tier = 'gold';
+          } else if (title.includes('silver') || desc.includes('silver')) {
+            tier = 'silver';
           }
 
           // Keep highest tier for each customer
           const existingTier = uniqueCustomers.get(clientId);
           if (
             !existingTier ||
-            tier === "platinum" ||
-            (tier === "gold" && existingTier !== "platinum") ||
-            (tier === "silver" && existingTier === "general")
+            tier === 'platinum' ||
+            (tier === 'gold' && existingTier !== 'platinum') ||
+            (tier === 'silver' && existingTier === 'general')
           ) {
             uniqueCustomers.set(clientId, tier);
           }
@@ -1159,16 +1125,16 @@ export class DashboardService {
 
         // Count by tier
         silverMembers = Array.from(uniqueCustomers.values()).filter(
-          (tier) => tier === "silver",
+          (tier) => tier === 'silver',
         ).length;
         goldMembers = Array.from(uniqueCustomers.values()).filter(
-          (tier) => tier === "gold",
+          (tier) => tier === 'gold',
         ).length;
         platinumMembers = Array.from(uniqueCustomers.values()).filter(
-          (tier) => tier === "platinum",
+          (tier) => tier === 'platinum',
         ).length;
 
-        console.log("Job title approach - found:", {
+        console.log('Job title approach - found:', {
           silverMembers,
           goldMembers,
           platinumMembers,
@@ -1181,33 +1147,33 @@ export class DashboardService {
         );
       }
     } catch (error) {
-      console.log("Line items table not available, using job title fallback");
+      console.log('Line items table not available, using job title fallback');
       // Fallback to job title approach
       const membershipJobs = jobs.filter(
         (job) =>
-          job.title?.toLowerCase().includes("membership") ||
-          job.title?.toLowerCase().includes("silver") ||
-          job.title?.toLowerCase().includes("gold") ||
-          job.title?.toLowerCase().includes("platinum") ||
-          job.description?.toLowerCase().includes("membership"),
+          job.title?.toLowerCase().includes('membership') ||
+          job.title?.toLowerCase().includes('silver') ||
+          job.title?.toLowerCase().includes('gold') ||
+          job.title?.toLowerCase().includes('platinum') ||
+          job.description?.toLowerCase().includes('membership'),
       );
 
       silverMembers = membershipJobs.filter(
         (job) =>
-          job.title?.toLowerCase().includes("silver") ||
-          job.description?.toLowerCase().includes("silver"),
+          job.title?.toLowerCase().includes('silver') ||
+          job.description?.toLowerCase().includes('silver'),
       ).length;
 
       goldMembers = membershipJobs.filter(
         (job) =>
-          job.title?.toLowerCase().includes("gold") ||
-          job.description?.toLowerCase().includes("gold"),
+          job.title?.toLowerCase().includes('gold') ||
+          job.description?.toLowerCase().includes('gold'),
       ).length;
 
       platinumMembers = membershipJobs.filter(
         (job) =>
-          job.title?.toLowerCase().includes("platinum") ||
-          job.description?.toLowerCase().includes("platinum"),
+          job.title?.toLowerCase().includes('platinum') ||
+          job.description?.toLowerCase().includes('platinum'),
       ).length;
 
       monthlyMembershipRevenue = membershipJobs.reduce(
@@ -1222,7 +1188,7 @@ export class DashboardService {
     ).length;
     const serviceTickets = jobs.filter(
       (job) =>
-        job.title?.toLowerCase().includes("service") ||
+        job.title?.toLowerCase().includes('service') ||
         (job.revenue || 0) < 1000,
     ).length;
 
@@ -1247,12 +1213,12 @@ export class DashboardService {
     const repeatCustomerPercentage =
       totalCustomers > 0 ? (repeatCustomers / totalCustomers) * 100 : 0;
 
-    // Emergency work estimation (service calls with "emergency" or same-day scheduling)
+    // Emergency work estimation (service calls with 'emergency' or same-day scheduling)
     const emergencyJobs = jobs.filter(
       (job) =>
-        job.title?.toLowerCase().includes("emergency") ||
-        job.title?.toLowerCase().includes("urgent") ||
-        job.title?.toLowerCase().includes("service call"),
+        job.title?.toLowerCase().includes('emergency') ||
+        job.title?.toLowerCase().includes('urgent') ||
+        job.title?.toLowerCase().includes('service call'),
     ).length;
     const emergencyRatio =
       jobs.length > 0 ? (emergencyJobs / jobs.length) * 100 : 0;
@@ -1322,7 +1288,7 @@ export class DashboardService {
     const currentYear = new Date().getFullYear();
 
     await supabase
-      .from("dashboard_targets")
+      .from('dashboard_targets')
       .upsert({
         target_type: targetType,
         target_value: value,

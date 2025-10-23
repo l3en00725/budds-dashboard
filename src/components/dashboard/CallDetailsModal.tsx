@@ -64,8 +64,9 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
-    });
+      hour12: true,
+      timeZone: 'America/New_York'
+    }) + ' ET';
   };
 
   const formatDuration = (seconds: number) => {

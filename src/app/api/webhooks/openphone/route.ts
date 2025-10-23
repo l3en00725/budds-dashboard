@@ -29,17 +29,47 @@ export async function POST(request: NextRequest) {
     );
 
     const supabase = createServiceRoleClient();
-    const eventType = payload.event || payload.type;
+
+    // Get event type from payload - OpenPhone sends it in different locations
+    const eventType = payload.object?.type || payload.event || payload.type;
 
     // Log event type BEFORE any processing
     console.log("📥 EVENT TYPE:", eventType);
 
-    // Extract the call data from the nested payload structure
-    const callData =
-      payload.object?.data?.object ||
-      payload.data?.object ||
-      payload.data ||
-      payload;
+    // Filter out SMS events - will be tracked separately in future SMS Analytics feature
+    if (eventType === "message.received" || eventType === "message.delivered") {
+      console.log("💬 Processing message event:", eventType);
+      console.log(
+        "⚠️  ACTION: SKIPPING - Messages should go to openphone_messages table (not implemented yet)",
+      );
+      console.log(
+        "Ignoring SMS event:",
+        eventType,
+        "from",
+        payload.data?.phoneNumber || "unknown",
+      );
+      return NextResponse.json({
+        success: true,
+        message:
+          "SMS event ignored - will be tracked in future SMS Analytics widget",
+      });
+    }
+
+    // Handle call events only (call.completed, call.transcript.completed, call.summary.completed, etc.)
+    if (
+      eventType === "call.completed" ||
+      eventType === "call.transcript.completed" ||
+      eventType === "call.summary.completed" ||
+      eventType === "call.recording.completed" ||
+      eventType === "test" ||
+      !eventType
+    ) {
+      // OpenPhone nests data under different structures depending on API version
+      const callData =
+        payload.object?.data?.object ||
+        payload.data?.object ||
+        payload.data ||
+        payload;
 
     console.log("Extracted call data:", JSON.stringify(callData, null, 2));
 
@@ -53,15 +83,26 @@ export async function POST(request: NextRequest) {
       console.log("📞 Processing call.completed event for call:", callId);
       console.log("⚡ ACTION: UPSERT into openphone_calls");
 
-      const callerNumber = callData.from || callData.phoneNumber || "Unknown";
+      // Extract call information - handle different payload structures
+      const callerNumber =
+        callData.from ||
+        callData.phoneNumber ||
+        callData.participants?.[0]?.phoneNumber ||
+        "+15550000000";
       const receiverNumber =
         callData.to || callData.receiverNumber || "Unknown";
-      const direction = callData.direction || "incoming";
-      const duration =
-        callData.duration ||
-        calculateDuration(callData.createdAt, callData.completedAt);
+      const direction =
+        callData.direction === "incoming"
+          ? "inbound"
+          : callData.direction || "inbound";
+      const duration = Math.round(
+        callData.callTranscript?.duration || callData.duration || 0,
+      );
       const callDate =
-        callData.completedAt || callData.createdAt || new Date().toISOString();
+        callData.completedAt ||
+        callData.createdAt ||
+        callData.startedAt ||
+        new Date().toISOString();
 
       // Get AI classification (with null transcript initially)
       const classification = await classifyCallWithClaude(
@@ -218,33 +259,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 3️⃣ Handle message events (do NOT insert into openphone_calls)
-    // ============================================================
-    if (eventType === "message.received" || eventType === "message.delivered") {
-      console.log("💬 Processing message event:", eventType);
-      console.log(
-        "⚠️  ACTION: SKIPPING - Messages should go to openphone_messages table (not implemented yet)",
-      );
-
-      // TODO: Implement openphone_messages table and insert logic here
-      // const messageData = {
-      //   message_id: callData.id,
-      //   from: callData.from,
-      //   to: callData.to,
-      //   direction: callData.direction,
-      //   content: callData.text || callData.content,
-      //   created_at: callData.createdAt,
-      // };
-      // await supabase.from('openphone_messages').insert(messageData);
-
-      return NextResponse.json({
-        success: true,
-        message: `Message event ${eventType} acknowledged but not stored yet`,
-        event_type: eventType,
-      });
-    }
-
-    // ============================================================
     // Handle unknown/test events
     // ============================================================
     console.log("⚠️  Unhandled webhook event type:", eventType);
@@ -254,6 +268,8 @@ export async function POST(request: NextRequest) {
       message: "Webhook received but not processed",
       event_type: eventType,
     });
+  }
+
   } catch (error) {
     console.error("OpenPhone webhook error:", error);
     return NextResponse.json(
