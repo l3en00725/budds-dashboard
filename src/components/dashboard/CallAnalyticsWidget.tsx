@@ -1,12 +1,19 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Phone, PhoneCall, TrendingUp, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import { useState } from "react";
+import {
+  Phone,
+  PhoneCall,
+  TrendingUp,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 import { DashboardMetrics } from "@/lib/dashboard-service";
-import { CallDetailsModal } from './CallDetailsModal';
+import { CallDetailsModal } from "./CallDetailsModal";
 
 interface CallAnalyticsWidgetProps {
-  data: DashboardMetrics['callAnalytics'];
+  data: DashboardMetrics["callAnalytics"];
 }
 
 export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
@@ -14,67 +21,93 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
   const [modalData, setModalData] = useState<{
     title: string;
     calls: any[];
-    color: 'purple' | 'emerald' | 'red' | 'blue' | 'amber';
-  }>({ title: '', calls: [], color: 'purple' });
+    color: "purple" | "emerald" | "red" | "blue" | "amber";
+  }>({ title: "", calls: [], color: "purple" });
   const [loading, setLoading] = useState(false);
 
-  const conversionRate = data.today.totalCalls > 0 ? Math.round((data.today.appointmentsBooked / data.today.totalCalls) * 100) : 0;
-  const positiveRate = data.today.totalCalls > 0 ? Math.round((data.today.positivesentiment / data.today.totalCalls) * 100) : 0;
+  const conversionRate =
+    data.today.totalCalls > 0
+      ? Math.round(
+          (data.today.appointmentsBooked / data.today.totalCalls) * 100,
+        )
+      : 0;
+  const positiveRate =
+    data.today.totalCalls > 0
+      ? Math.round((data.today.positivesentiment / data.today.totalCalls) * 100)
+      : 0;
 
   const fetchCallDetails = async (category: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/calls/by-category?category=${category}&date=today`);
+      const response = await fetch(
+        `/api/calls/by-category?category=${category}&date=today`,
+      );
       const result = await response.json();
 
-      let title = '';
-      let color: 'purple' | 'emerald' | 'red' | 'blue' | 'amber' = 'purple';
+      let title = "";
+      let color: "purple" | "emerald" | "red" | "blue" | "amber" = "purple";
 
       switch (category) {
-        case 'booked':
-          title = 'Appointments Booked';
-          color = 'emerald';
+        case "booked":
+          title = "Appointments Booked";
+          color = "emerald";
           break;
-        case 'emergency':
-          title = 'Emergency Calls';
-          color = 'red';
+        case "emergency":
+          title = "Emergency Calls";
+          color = "red";
           break;
-        case 'followup':
-          title = 'Follow-ups Scheduled';
-          color = 'blue';
+        case "followup":
+          title = "Follow-ups Scheduled";
+          color = "blue";
           break;
-        case 'total':
-          title = 'All Calls Today';
-          color = 'purple';
+        case "total":
+          title = "All Calls Today";
+          color = "purple";
           break;
       }
 
       setModalData({ title, calls: result.calls || [], color });
       setModalOpen(true);
     } catch (error) {
-      console.error('Error fetching call details:', error);
+      console.error("Error fetching call details:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const getStatusColor = (percentage: number) => {
-    if (percentage >= 70) return 'text-emerald-600 bg-emerald-50';
-    if (percentage >= 50) return 'text-amber-600 bg-amber-50';
-    return 'text-red-600 bg-red-50';
+    if (percentage >= 70) return "text-emerald-600 bg-emerald-50";
+    if (percentage >= 50) return "text-amber-600 bg-amber-50";
+    return "text-red-600 bg-red-50";
   };
 
   const pipelineData = [
-    { label: 'Qualified', count: data.today.pipelineBreakdown.qualified, color: 'bg-emerald-500' },
-    { label: 'Follow-Up', count: data.today.pipelineBreakdown.followUp, color: 'bg-blue-500' },
-    { label: 'New Leads', count: data.today.pipelineBreakdown.newLeads, color: 'bg-purple-500' },
-    { label: 'Closed-Lost', count: data.today.pipelineBreakdown.closedLost, color: 'bg-gray-400' },
+    {
+      label: "Qualified",
+      count: data.today.pipelineBreakdown.qualified,
+      color: "bg-emerald-500",
+    },
+    {
+      label: "Follow-Up",
+      count: data.today.pipelineBreakdown.followUp,
+      color: "bg-blue-500",
+    },
+    {
+      label: "New Leads",
+      count: data.today.pipelineBreakdown.newLeads,
+      color: "bg-purple-500",
+    },
+    {
+      label: "Closed-Lost",
+      count: data.today.pipelineBreakdown.closedLost,
+      color: "bg-gray-400",
+    },
   ];
 
   const getTrendIcon = (change: number) => {
-    if (change > 0) return { icon: '↗️', color: 'text-emerald-600' };
-    if (change < 0) return { icon: '↘️', color: 'text-red-600' };
-    return { icon: '→', color: 'text-gray-600' };
+    if (change > 0) return { icon: "↗️", color: "text-emerald-600" };
+    if (change < 0) return { icon: "↘️", color: "text-red-600" };
+    return { icon: "→", color: "text-gray-600" };
   };
 
   return (
@@ -86,7 +119,9 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
             <Phone className="h-5 w-5 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-semibold gradient-text text-xl">Today's Call Intelligence</h3>
+            <h3 className="font-semibold gradient-text text-xl">
+              Today's Call Intelligence
+            </h3>
             <p className="text-sm gradient-text">AI-powered call analysis</p>
           </div>
         </div>
@@ -98,47 +133,79 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
 
       {/* Today's Metrics */}
       <div className="mb-6">
-        <h4 className="text-sm font-semibold gradient-text mb-3">Today's Performance</h4>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <h4 className="text-sm font-semibold gradient-text mb-3">
+          Today's Performance
+        </h4>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* Total Calls */}
           <button
-            onClick={() => fetchCallDetails('total')}
+            onClick={() => fetchCallDetails("total")}
             className="text-center p-3 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
           >
             <PhoneCall className="h-5 w-5 text-purple-600 mx-auto mb-1" />
-            <div className="text-xl font-bold gradient-text">{data.today.totalCalls}</div>
+            <div className="text-xl font-bold gradient-text">
+              {data.today.totalCalls}
+            </div>
             <div className="text-xs gradient-text">Total Calls</div>
           </button>
 
           {/* Appointments Booked */}
           <button
-            onClick={() => fetchCallDetails('booked')}
+            onClick={() => fetchCallDetails("booked")}
             className="text-center p-3 rounded-xl bg-emerald-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
           >
             <CheckCircle className="h-5 w-5 text-emerald-600 mx-auto mb-1" />
-            <div className="text-xl font-bold text-emerald-700">{data.today.appointmentsBooked}</div>
+            <div className="text-xl font-bold text-emerald-700">
+              {data.today.appointmentsBooked}
+            </div>
             <div className="text-xs text-emerald-600">Appointments</div>
           </button>
 
           {/* Emergency Calls */}
           <button
-            onClick={() => fetchCallDetails('emergency')}
+            onClick={() => fetchCallDetails("emergency")}
             className="text-center p-3 rounded-xl bg-red-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
           >
             <AlertTriangle className="h-5 w-5 text-red-600 mx-auto mb-1" />
-            <div className="text-xl font-bold text-red-700">{data.today.emergencyCallsToday}</div>
+            <div className="text-xl font-bold text-red-700">
+              {data.today.emergencyCallsToday}
+            </div>
             <div className="text-xs text-red-600">Emergency</div>
           </button>
 
           {/* Follow-ups */}
           <button
-            onClick={() => fetchCallDetails('followup')}
+            onClick={() => fetchCallDetails("followup")}
             className="text-center p-3 rounded-xl bg-blue-50 hover:shadow-md hover:scale-105 transition-all cursor-pointer w-full"
           >
             <Clock className="h-5 w-5 text-blue-600 mx-auto mb-1" />
-            <div className="text-xl font-bold text-blue-700">{data.today.followUpsScheduled}</div>
+            <div className="text-xl font-bold text-blue-700">
+              {data.today.followUpsScheduled}
+            </div>
             <div className="text-xs text-blue-600">Follow-ups</div>
           </button>
+        </div>
+
+        {/* Inbound/Outbound Breakdown */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100">
+            <div className="text-sm font-medium text-indigo-700 mb-1">
+              Inbound
+            </div>
+            <div className="text-2xl font-bold text-indigo-900">
+              {data.today.inboundCalls}
+            </div>
+            <div className="text-xs text-indigo-600">customer calls</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-100">
+            <div className="text-sm font-medium text-violet-700 mb-1">
+              Outbound
+            </div>
+            <div className="text-2xl font-bold text-violet-900">
+              {data.today.outboundCalls}
+            </div>
+            <div className="text-xs text-violet-600">follow-up calls</div>
+          </div>
         </div>
       </div>
 
@@ -147,8 +214,12 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
         {/* Conversion Rate */}
         <div className="p-4 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Conversion Rate</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(conversionRate)}`}>
+            <span className="text-sm font-medium text-gray-700">
+              Conversion Rate
+            </span>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(conversionRate)}`}
+            >
               {conversionRate}%
             </span>
           </div>
@@ -163,8 +234,12 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
         {/* Positive Sentiment */}
         <div className="p-4 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Positive Sentiment</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(positiveRate)}`}>
+            <span className="text-sm font-medium text-gray-700">
+              Positive Sentiment
+            </span>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(positiveRate)}`}
+            >
               {positiveRate}%
             </span>
           </div>
@@ -179,15 +254,21 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
         {/* AI Confidence */}
         <div className="p-4 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">AI Confidence</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(data.today.averageConfidence)}`}>
+            <span className="text-sm font-medium text-gray-700">
+              AI Confidence
+            </span>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(data.today.averageConfidence)}`}
+            >
               {data.today.averageConfidence}%
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="h-2 rounded-full bg-gradient-to-r from-purple-400 to-purple-600 transition-all duration-500"
-              style={{ width: `${Math.min(data.today.averageConfidence, 100)}%` }}
+              style={{
+                width: `${Math.min(data.today.averageConfidence, 100)}%`,
+              }}
             />
           </div>
         </div>
@@ -195,14 +276,20 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
 
       {/* Weekly Trends */}
       <div className="mb-6">
-        <h4 className="text-sm font-semibold gradient-text mb-3">This Week vs Last Week</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <h4 className="text-sm font-semibold gradient-text mb-3">
+          This Week vs Last Week
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {/* Total Calls Trend */}
           <div className="p-4 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Total Calls</span>
+              <span className="text-sm font-medium text-gray-700">
+                Total Calls
+              </span>
               <div className="flex items-center gap-1">
-                <span className={`text-lg ${getTrendIcon(data.thisWeek.trends.callsChange).color}`}>
+                <span
+                  className={`text-lg ${getTrendIcon(data.thisWeek.trends.callsChange).color}`}
+                >
                   {getTrendIcon(data.thisWeek.trends.callsChange).icon}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
@@ -210,16 +297,22 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
                 </span>
               </div>
             </div>
-            <div className="text-2xl font-bold text-gray-900">{data.thisWeek.totalCalls}</div>
+            <div className="text-2xl font-bold text-gray-900">
+              {data.thisWeek.totalCalls}
+            </div>
             <div className="text-xs text-gray-500">this week</div>
           </div>
 
           {/* Appointments Trend */}
           <div className="p-4 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Appointments</span>
+              <span className="text-sm font-medium text-gray-700">
+                Appointments
+              </span>
               <div className="flex items-center gap-1">
-                <span className={`text-lg ${getTrendIcon(data.thisWeek.trends.bookedChange).color}`}>
+                <span
+                  className={`text-lg ${getTrendIcon(data.thisWeek.trends.bookedChange).color}`}
+                >
                   {getTrendIcon(data.thisWeek.trends.bookedChange).icon}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
@@ -227,16 +320,22 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
                 </span>
               </div>
             </div>
-            <div className="text-2xl font-bold text-emerald-700">{data.thisWeek.appointmentsBooked}</div>
+            <div className="text-2xl font-bold text-emerald-700">
+              {data.thisWeek.appointmentsBooked}
+            </div>
             <div className="text-xs text-emerald-600">this week</div>
           </div>
 
           {/* Emergency Trend */}
           <div className="p-4 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Emergency</span>
+              <span className="text-sm font-medium text-gray-700">
+                Emergency
+              </span>
               <div className="flex items-center gap-1">
-                <span className={`text-lg ${getTrendIcon(data.thisWeek.trends.emergencyChange).color}`}>
+                <span
+                  className={`text-lg ${getTrendIcon(data.thisWeek.trends.emergencyChange).color}`}
+                >
                   {getTrendIcon(data.thisWeek.trends.emergencyChange).icon}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
@@ -244,20 +343,53 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
                 </span>
               </div>
             </div>
-            <div className="text-2xl font-bold text-red-700">{data.thisWeek.emergencyCallsWeek}</div>
+            <div className="text-2xl font-bold text-red-700">
+              {data.thisWeek.emergencyCallsWeek}
+            </div>
             <div className="text-xs text-red-600">this week</div>
+          </div>
+        </div>
+
+        {/* Weekly Inbound/Outbound Breakdown */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100">
+            <div className="text-sm font-medium text-indigo-700 mb-1">
+              Inbound This Week
+            </div>
+            <div className="text-2xl font-bold text-indigo-900">
+              {data.thisWeek.inboundCalls}
+            </div>
+            <div className="text-xs text-indigo-600">customer calls</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-100">
+            <div className="text-sm font-medium text-violet-700 mb-1">
+              Outbound This Week
+            </div>
+            <div className="text-2xl font-bold text-violet-900">
+              {data.thisWeek.outboundCalls}
+            </div>
+            <div className="text-xs text-violet-600">follow-up calls</div>
           </div>
         </div>
       </div>
 
       {/* Pipeline Breakdown */}
       <div>
-        <h4 className="text-sm font-medium gradient-text mb-3">Sales Pipeline Breakdown</h4>
+        <h4 className="text-sm font-medium gradient-text mb-3">
+          Sales Pipeline Breakdown
+        </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {pipelineData.map((item, index) => (
-            <div key={index} className="text-center p-3 rounded-lg border border-gray-100">
-              <div className={`w-3 h-3 rounded-full ${item.color} mx-auto mb-2`}></div>
-              <div className="text-lg font-bold text-gray-900">{item.count}</div>
+            <div
+              key={index}
+              className="text-center p-3 rounded-lg border border-gray-100"
+            >
+              <div
+                className={`w-3 h-3 rounded-full ${item.color} mx-auto mb-2`}
+              ></div>
+              <div className="text-lg font-bold text-gray-900">
+                {item.count}
+              </div>
               <div className="text-xs text-gray-500">{item.label}</div>
             </div>
           ))}
@@ -269,7 +401,10 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">
-              Not Interested: <span className="font-medium text-gray-900">{data.today.notInterested}</span>
+              Not Interested:{" "}
+              <span className="font-medium text-gray-900">
+                {data.today.notInterested}
+              </span>
             </span>
             {data.today.averageConfidence > 80 && (
               <span className="text-emerald-600 font-medium flex items-center gap-1">
