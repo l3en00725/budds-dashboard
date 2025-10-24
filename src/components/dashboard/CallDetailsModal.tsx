@@ -9,7 +9,10 @@ interface CallDetail {
   duration: number;
   transcript: string;
   classified_as_booked: boolean;
-  classification_confidence: number;
+  ai_confidence: number;
+  is_emergency?: boolean;
+  sentiment?: string;
+  service_type?: string;
 }
 
 interface CallDetailsModalProps {
@@ -128,7 +131,7 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
                       <div className="flex items-center gap-4 text-sm text-gray-600">
                         <span>🕐 {formatTime(call.call_date)}</span>
                         <span>⏱️ {formatDuration(call.duration)}</span>
-                        <span>🎯 {Math.round(call.classification_confidence * 100)}% confidence</span>
+                        <span>🎯 {Math.round((call.ai_confidence || 0) * 100)}% confidence</span>
                       </div>
                     </div>
                   </div>
