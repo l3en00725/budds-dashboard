@@ -3,12 +3,12 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   eslint: {
-    // Disable ESLint during builds for now
-    ignoreDuringBuilds: true,
+    // ESLint errors will fail production builds
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    // Disable TypeScript checks during builds for now
-    ignoreBuildErrors: true,
+    // TypeScript errors will fail production builds
+    ignoreBuildErrors: false,
   },
 };
 

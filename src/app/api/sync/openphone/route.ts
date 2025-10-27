@@ -3,6 +3,7 @@ import { createServiceRoleClient } from '@/lib/supabase';
 
 const OPENPHONE_API_BASE_URL = process.env.OPENPHONE_API_BASE_URL || 'https://api.openphone.com/v1';
 const OPENPHONE_API_KEY = process.env.OPENPHONE_API_KEY;
+const OPENPHONE_PHONE_NUMBER_ID = process.env.OPENPHONE_PHONE_NUMBER_ID;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 export async function POST() {
@@ -128,11 +129,13 @@ export async function POST() {
 }
 
 async function fetchOpenPhoneCalls(date: string) {
-  const mainPhoneId = "PN7r9F5MtW"; // Budd's Plumbing main line
+  if (!OPENPHONE_PHONE_NUMBER_ID) {
+    throw new Error('OPENPHONE_PHONE_NUMBER_ID environment variable is required');
+  }
 
   // Fixed: Add participants parameter which is now required by OpenPhone API
   // Fixed: Ensure proper date range query format
-  const url = `${OPENPHONE_API_BASE_URL}/calls?phoneNumberId=${mainPhoneId}&participants[]=${mainPhoneId}&createdAt[gte]=${date}T00:00:00Z&createdAt[lt]=${date}T23:59:59Z`;
+  const url = `${OPENPHONE_API_BASE_URL}/calls?phoneNumberId=${OPENPHONE_PHONE_NUMBER_ID}&participants[]=${OPENPHONE_PHONE_NUMBER_ID}&createdAt[gte]=${date}T00:00:00Z&createdAt[lt]=${date}T23:59:59Z`;
 
   console.log('Fetching OpenPhone calls from:', url);
 

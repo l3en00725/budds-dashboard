@@ -70,12 +70,13 @@ export async function GET(request: NextRequest) {
       // Continue anyway - don't break the OAuth flow
     }
 
-    // Store the access token (you might want to encrypt this)
+    // Store the access token in httpOnly cookie (secure, server-only access)
     const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
 
-    // Set secure cookie for the access token (temporarily non-httpOnly for sync functionality)
+    // Set secure httpOnly cookie for the access token
+    // If client-side access is needed, use /api/jobber/proxy instead
     response.cookies.set('jobber_access_token', tokenData.access_token, {
-      httpOnly: false, // Allow client-side access for sync functionality
+      httpOnly: true, // Prevent client-side JavaScript access (XSS protection)
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: tokenData.expires_in || 7200, // Default to 2 hours instead of 1

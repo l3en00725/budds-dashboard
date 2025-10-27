@@ -1,0 +1,30 @@
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Test and debug files (non-production)
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+add-test-call.js
+check-database.js
+
+# Pipedream workflows (external)
+pipedream-workflows/
+
+# MCP server (Python)
+mcp-server/
+
+# One-off scripts
+scripts/identify-sms-messages.ts
+
+# Debug API routes (non-production endpoints)
+src/app/api/debug/
+src/app/api/test-*/
+src/app/api/analyze-conversations/
