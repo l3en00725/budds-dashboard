@@ -13,66 +13,117 @@ import * as Sentry from '@sentry/nextjs';
 const JOBBER_API_URL = process.env.JOBBER_API_BASE_URL || 'https://api.getjobber.com/api/graphql';
 
 async function syncJobberHandler(request: NextRequest) {
-  try {
-    const supabase = createServiceRoleClient();
+  const supabase = createServiceRoleClient();
+  let totalRecordsSynced = 0;
+  let syncLogId: string | null = null;
 
-    // Log sync start
-    const { data: syncLog } = await supabase
+  try {
+    // ============================================
+    // START LOG: Create initial sync_log entry
+    // ============================================
+    const startTime = new Date().toISOString();
+    console.log(`[SYNC START] Initiating Jobber full sync at ${startTime}`);
+
+    const { data: syncLog, error: syncLogError } = await supabase
       .from('sync_log')
       .insert({
         sync_type: 'jobber_full_sync',
         status: 'running',
-        started_at: new Date().toISOString(),
+        started_at: startTime,
       })
       .select()
       .single();
 
-    let totalRecordsSynced = 0;
+    if (syncLogError) {
+      console.error('[SYNC START ERROR] Failed to create sync log:', syncLogError);
+      throw syncLogError;
+    }
+
+    if (!syncLog || !syncLog.id) {
+      const error = new Error('Sync log created but no ID returned');
+      console.error('[SYNC START ERROR]', error);
+      throw error;
+    }
+
+    syncLogId = syncLog.id;
+    console.log(`[SYNC START] Created sync log entry with ID: ${syncLogId}`);
 
     try {
-      // Get stored Jobber token
-      // Note: In production, you'd get this from your token storage
-      // For now, we'll need the token to be available somehow
-
-      // Sync Jobs data
+      // ============================================
+      // SYNC EXECUTION: Run all sync operations
+      // ============================================
+      console.log('[SYNC EXECUTION] Starting Jobs sync...');
       const jobsRecords = await syncJobberJobs(request);
       totalRecordsSynced += jobsRecords;
+      console.log(`[SYNC EXECUTION] Jobs complete: ${jobsRecords} records`);
 
-      // Enable invoice and payment sync to fix AR and weekly revenue
-      console.log('Syncing jobs, invoices, and payments...');
+      console.log('[SYNC EXECUTION] Starting Quotes, Invoices, and Payments sync...');
 
-      // const quotesRecords = await syncJobberQuotes(request);
-      // totalRecordsSynced += quotesRecords;
+      const quotesRecords = await syncJobberQuotes(request);
+      totalRecordsSynced += quotesRecords;
+      console.log(`[SYNC EXECUTION] Quotes complete: ${quotesRecords} records`);
+
       const invoicesRecords = await syncJobberInvoices(request);
       totalRecordsSynced += invoicesRecords;
+      console.log(`[SYNC EXECUTION] Invoices complete: ${invoicesRecords} records`);
+
       const paymentsRecords = await syncJobberPayments(request);
       totalRecordsSynced += paymentsRecords;
+      console.log(`[SYNC EXECUTION] Payments complete: ${paymentsRecords} records`);
 
-      // Update sync log with success
-      await supabase
+      // ============================================
+      // SUCCESS LOG: Update sync_log with success
+      // ============================================
+      const completedAt = new Date().toISOString();
+      console.log(`[SYNC SUCCESS] All operations complete. Total records: ${totalRecordsSynced}`);
+
+      const { error: updateError } = await supabase
         .from('sync_log')
         .update({
           status: 'success',
           records_synced: totalRecordsSynced,
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
         })
-        .eq('id', syncLog.id);
+        .eq('id', syncLogId);
+
+      if (updateError) {
+        console.error('[SYNC SUCCESS] Warning: Failed to update sync log:', updateError);
+      } else {
+        console.log(`[SYNC SUCCESS] Updated sync log ${syncLogId} with success status`);
+      }
 
       return NextResponse.json({
         success: true,
         recordsSynced: totalRecordsSynced,
-        syncId: syncLog.id,
+        syncId: syncLogId,
       });
+
     } catch (error) {
-      // Update sync log with error
-      await supabase
-        .from('sync_log')
-        .update({
-          status: 'error',
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', syncLog.id);
+      // ============================================
+      // ERROR LOG: Update sync_log with error details
+      // ============================================
+      const completedAt = new Date().toISOString();
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      console.error(`[SYNC ERROR] Sync failed after ${totalRecordsSynced} records:`, errorMessage);
+
+      if (syncLogId) {
+        const { error: updateError } = await supabase
+          .from('sync_log')
+          .update({
+            status: 'error',
+            error_message: errorMessage,
+            records_synced: totalRecordsSynced, // Track partial progress even on failure
+            completed_at: completedAt,
+          })
+          .eq('id', syncLogId);
+
+        if (updateError) {
+          console.error('[SYNC ERROR] Warning: Failed to update sync log with error:', updateError);
+        } else {
+          console.log(`[SYNC ERROR] Updated sync log ${syncLogId} with error status`);
+        }
+      }
 
       throw error;
     }
@@ -83,14 +134,14 @@ async function syncJobberHandler(request: NextRequest) {
     Sentry.setContext('sync_operation', {
       type: 'jobber_full_sync',
       recordsSynced: totalRecordsSynced,
-      syncId: syncLog?.id,
+      syncId: syncLogId,
     });
 
     throw new IntegrationError(
       'jobber',
       error instanceof Error ? error.message : 'Unknown sync error',
       error instanceof Error ? error : undefined,
-      { totalRecordsSynced, syncId: syncLog?.id }
+      { totalRecordsSynced, syncId: syncLogId }
     );
   }
 }
@@ -112,30 +163,52 @@ async function getJobberToken(request: NextRequest): Promise<string | null> {
       return accessToken;
     }
 
-    // Fallback to server cookies
-    const cookieStore = await cookies();
+    // Fallback to server cookies (synchronous)
+    const cookieStore = cookies();
     accessToken = cookieStore.get('jobber_access_token')?.value;
 
     if (accessToken) {
       return accessToken;
     }
 
-    // If no access token, try to refresh using refresh token
-    const refreshToken = request.cookies.get('jobber_refresh_token')?.value ||
+    // If no access token in cookies, load from Supabase `jobber_tokens` table (service-role)
+    const supabase = createServiceRoleClient();
+    const { data: storedToken } = await supabase
+      .from('jobber_tokens')
+      .select('access_token, refresh_token, expires_at')
+      .eq('id', 1)
+      .single();
+
+    if (storedToken?.access_token && Date.now() < new Date(storedToken.expires_at).getTime()) {
+      console.log('Using Jobber token from database');
+      return storedToken.access_token;
+    }
+
+    // Token expired or missing - try to refresh
+    const refreshToken = storedToken?.refresh_token ??
+                        request.cookies.get('jobber_refresh_token')?.value ??
                         cookieStore.get('jobber_refresh_token')?.value;
 
     if (refreshToken) {
-      console.log('Access token not found, attempting to refresh...');
+      console.log('Token expired or missing, attempting to refresh...');
       const newAccessToken = await refreshJobberToken(refreshToken);
       if (newAccessToken) {
         console.log('Successfully refreshed Jobber token');
+        // Persist refreshed token to database
+        await supabase.from('jobber_tokens').upsert({
+          id: 1,
+          access_token: newAccessToken,
+          refresh_token: refreshToken,
+          expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        });
         return newAccessToken;
       }
     }
 
     return null;
   } catch (error) {
-    console.error('Error getting Jobber token from cookies:', error);
+    console.error('Error getting Jobber token:', error);
     return null;
   }
 }
@@ -162,9 +235,22 @@ async function refreshJobberToken(refreshToken: string): Promise<string | null> 
 
     const tokenData = await response.json();
 
-    // Update cookies with new tokens (Note: this won't affect current request but future ones)
-    // In a real app, you'd want to store this in a database or return it to update cookies
-    console.log('Jobber token refreshed successfully');
+    // Update database with new tokens
+    const supabase = createServiceRoleClient();
+    const expiresInSeconds = tokenData.expires_in || 3600;
+    const expiresAt = new Date(Date.now() + (expiresInSeconds * 1000));
+
+    await supabase
+      .from('jobber_tokens')
+      .upsert({
+        id: 1,
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token || refreshToken, // Keep old refresh token if new one not provided
+        expires_at: expiresAt.toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    console.log('Jobber token refreshed and saved to database');
 
     return tokenData.access_token;
   } catch (error) {
@@ -256,6 +342,7 @@ async function makeJobberRequest(query: string, variables: any = {}, request: Ne
       );
     }
 
+    console.error('Jobber GraphQL errors:', JSON.stringify(data.errors, null, 2));
     throw new IntegrationError(
       'jobber',
       'GraphQL query failed',
@@ -274,8 +361,8 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
   let cursor = null;
 
   const query = `
-    query GetJobs($first: Int, $after: String, $createdAtGte: DateTime) {
-      jobs(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetJobs($first: Int!, $after: String) {
+      jobs(first: $first, after: $after) {
         nodes {
           id
           jobNumber
@@ -318,9 +405,7 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
-    // Set historical date to September 1st, 2025 for accurate financial data
-    const historicalDate = '2025-09-01T00:00:00Z';
-    const data = await makeJobberRequest(query, { first: 15, after: cursor, createdAtGte: historicalDate }, request);
+    const data = await makeJobberRequest(query, { first: 15, after: cursor }, request);
     const jobs = data.jobs.nodes;
 
     console.log(`Processing ${jobs.length} jobs (batch ${Math.floor(recordsSynced / 15) + 1})...`);
@@ -337,6 +422,8 @@ async function syncJobberJobs(request: NextRequest): Promise<number> {
         revenue: job.total || 0,
         client_id: job.client?.id,
         client_name: `${job.client?.firstName || ''} ${job.client?.lastName || ''}`.trim() || job.client?.companyName,
+        client_phone: null, // Phone/email not available on Jobs API Client
+        client_email: null,
         start_date: job.startAt,
         end_date: job.endAt,
         created_at_jobber: job.createdAt,
@@ -462,8 +549,8 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
   let cursor = null;
 
   const query = `
-    query GetInvoices($first: Int, $after: String, $createdAtGte: DateTime) {
-      invoices(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetInvoices($first: Int!, $after: String) {
+      invoices(first: $first, after: $after) {
         nodes {
           id
           invoiceNumber
@@ -492,9 +579,7 @@ async function syncJobberInvoices(request: NextRequest): Promise<number> {
   `;
 
   while (hasNextPage) {
-    // Set historical date to September 1st, 2025 for accurate financial data
-    const historicalDate = '2025-09-01T00:00:00Z';
-    const data = await makeJobberRequest(query, { first: 50, after: cursor, createdAtGte: historicalDate }, request);
+    const data = await makeJobberRequest(query, { first: 50, after: cursor }, request);
     const invoices = data.invoices.nodes;
 
     for (const invoice of invoices) {
@@ -530,8 +615,8 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
 
   // Get payment records through invoices since direct 'payments' query doesn't exist
   const query = `
-    query GetInvoicePaymentRecords($first: Int, $after: String, $createdAtGte: DateTime) {
-      invoices(first: $first, after: $after, filter: { createdAtGte: $createdAtGte }) {
+    query GetInvoicePaymentRecords($first: Int!, $after: String) {
+      invoices(first: $first, after: $after) {
         nodes {
           id
           invoiceNumber
@@ -574,9 +659,7 @@ async function syncJobberPayments(request: NextRequest): Promise<number> {
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
-    // Set historical date to September 1st, 2025 for accurate financial data
-    const historicalDate = '2025-09-01T00:00:00Z';
-    const data = await makeJobberRequest(query, { first: 30, after: cursor, createdAtGte: historicalDate }, request);
+    const data = await makeJobberRequest(query, { first: 30, after: cursor }, request);
     const invoices = data.invoices.nodes;
 
     console.log(`Processing payment records from ${invoices.length} invoices (batch ${Math.floor(recordsSynced / 30) + 1})...`);
