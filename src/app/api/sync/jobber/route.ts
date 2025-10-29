@@ -489,7 +489,7 @@ async function syncJobberQuotes(request: NextRequest): Promise<number> {
         nodes {
           id
           quoteNumber
-          quoteStatus
+          status: quoteStatus
           total
           createdAt
           expiresAt
@@ -522,12 +522,12 @@ async function syncJobberQuotes(request: NextRequest): Promise<number> {
       await supabase.from('jobber_quotes').upsert({
         quote_id: quote.id,
         quote_number: quote.quoteNumber,
-        client_id: quote.client?.id,
+        client_id: quote.client?.id ?? null,
         client_name: `${quote.client?.firstName || ''} ${quote.client?.lastName || ''}`.trim() || quote.client?.companyName,
-        client_email: quote.client?.emails?.[0]?.address,
-        client_phone: quote.client?.phoneNumbers?.[0]?.number,
-        status: quote.quoteStatus,
-        amount: quote.total || 0,
+        client_email: quote.client?.emails?.[0]?.address ?? null,
+        client_phone: quote.client?.phoneNumbers?.[0]?.number ?? null,
+        status: quote.status,
+        amount: quote.total ?? 0,
         created_at_jobber: quote.createdAt,
         expires_at: quote.expiresAt,
         pulled_at: new Date().toISOString(),
