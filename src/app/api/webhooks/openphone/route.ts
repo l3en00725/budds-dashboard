@@ -23,10 +23,11 @@ export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
 
-    console.log(
-      "OpenPhone webhook received:",
-      JSON.stringify(payload, null, 2),
-    );
+    // Remove noisy full-payload log
+    // console.log(
+    //   "OpenPhone webhook received:",
+    //   JSON.stringify(payload, null, 2),
+    // );
 
     // Get event type from payload - OpenPhone sends it in different locations
     const eventType = payload.object?.type || payload.event || payload.type;
@@ -121,434 +122,405 @@ export async function POST(request: NextRequest) {
         payload.data ||
         payload;
 
-    console.log("Extracted call data:", JSON.stringify(callData, null, 2));
+      // Extract call ID
+      const callId = callData.id || callData.callId || `openphone-${Date.now()}`;
 
-    // Extract call ID
-    const callId = callData.id || callData.callId || `openphone-${Date.now()}`;
+      // ============================================================
+      // 1️⃣ Handle call.completed events
+      // ============================================================
+      console.log("🔍 DEBUG: Checking call.completed handler for event type:", eventType);
+      if (eventType === "call.completed") {
+        console.log("📞 Processing call.completed event for call:", callId);
+        console.log("⚡ ACTION: UPSERT into openphone_calls");
 
-    // ============================================================
-    // 1️⃣ Handle call.completed events
-    // ============================================================
-    console.log("🔍 DEBUG: Checking call.completed handler for event type:", eventType);
-    if (eventType === "call.completed") {
-      console.log("📞 Processing call.completed event for call:", callId);
-      console.log("⚡ ACTION: UPSERT into openphone_calls");
+        // Extract call information - handle different payload structures
+        const callerNumber =
+          callData.from ||
+          callData.phoneNumber ||
+          callData.participants?.[0]?.phoneNumber ||
+          "+15550000000";
+        const receiverNumber =
+          callData.to || callData.receiverNumber || "Unknown";
+        const direction =
+          callData.direction === "incoming"
+            ? "inbound"
+            : callData.direction || "inbound";
+        // console.log("🔍 OpenPhone call payload (call.completed):", JSON.stringify(callData, null, 2));
 
-      // Extract call information - handle different payload structures
-      const callerNumber =
-        callData.from ||
-        callData.phoneNumber ||
-        callData.participants?.[0]?.phoneNumber ||
-        "+15550000000";
-      const receiverNumber =
-        callData.to || callData.receiverNumber || "Unknown";
-      const direction =
-        callData.direction === "incoming"
-          ? "inbound"
-          : callData.direction || "inbound";
-      console.log("🔍 OpenPhone call payload (call.completed):", JSON.stringify(callData, null, 2));
-
-      // Robust duration extraction from multiple sources
-      let duration: number = 0;
-      const computedFromTimestamps = (callData.completedAt && callData.createdAt)
-        ? Math.max(0, Math.round((new Date(callData.completedAt).getTime() - new Date(callData.createdAt).getTime()) / 1000))
-        : undefined;
-      duration = (
-        callData.duration ??
-        callData.callDuration ??
-        callData.media?.[0]?.duration ??
-        callData.callTranscript?.duration ??
-        callData.metadata?.duration ??
-        callData.call?.duration ??
-        computedFromTimestamps ??
-        0
-      );
-      if (!Number.isFinite(duration) || duration < 0) duration = 0;
-      console.log("⏱ Calculated duration (call.completed)", {
-        duration,
-        sources: {
-          callDataDuration: callData.duration,
-          callDuration: callData.callDuration,
-          mediaDuration: callData.media?.[0]?.duration,
-          transcriptDuration: callData.callTranscript?.duration,
-          metadataDuration: callData.metadata?.duration,
-          nestedCallDuration: callData.call?.duration,
-          computedFromTimestamps,
-          createdAt: callData.createdAt,
-          completedAt: callData.completedAt
-        }
-      });
-      
-      // Ensure callDate is in UTC format
-      let callDate = callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString();
-      
-      // If the date doesn't end with 'Z' or have timezone info, assume it's UTC
-      if (!callDate.endsWith('Z') && !callDate.includes('+') && !callDate.includes('-', 10)) {
-        // Add 'Z' to indicate UTC if not present
-        callDate = callDate.endsWith('Z') ? callDate : callDate + 'Z';
-      }
-      
-      // Convert to proper UTC ISO string
-      callDate = new Date(callDate).toISOString();
-
-      // Get AI classification (with null transcript initially)
-      const classification = await classifyCallWithClaude(
-        "",
-        duration,
-        callDate,
-        callerNumber,
-      );
-
-      const finalData = {
-        call_id: callId,
-        caller_number: callerNumber,
-        receiver_number: receiverNumber,
-        direction: direction,
-        duration: duration,
-        call_date: callDate,
-        transcript: null,
-        classified_as_outcome: classification.outcome,
-        classified_as_booked: classification.booked,
-        service_type: classification.service_type,
-        pipeline_stage: classification.pipeline_stage,
-        sentiment: classification.sentiment,
-        is_emergency: classification.is_emergency,
-        ai_confidence: classification.confidence_score / 100,
-        ai_summary: classification.summary,
-        notes: classification.notes,
-        pulled_at: new Date().toISOString(),
-      };
-
-      console.log("Final object sent to Supabase (call.completed):", finalData);
-
-      const { error: insertError } = await supabase
-        .from("openphone_calls")
-        .upsert(finalData);
-
-      if (insertError) {
-        console.error("Database insertion error:", insertError);
-        return NextResponse.json(
-          { error: "Failed to save call data", details: insertError.message },
-          { status: 500 },
+        // Robust duration extraction from multiple sources
+        let duration: number = 0;
+        const computedFromTimestamps = (callData.completedAt && callData.createdAt)
+          ? Math.max(0, Math.round((new Date(callData.completedAt).getTime() - new Date(callData.createdAt).getTime()) / 1000))
+          : undefined;
+        duration = (
+          callData.duration ??
+          callData.callDuration ??
+          callData.media?.[0]?.duration ??
+          callData.callTranscript?.duration ??
+          callData.metadata?.duration ??
+          callData.call?.duration ??
+          computedFromTimestamps ??
+          0
         );
-      }
+        if (!Number.isFinite(duration) || duration < 0) duration = 0;
 
-      console.log(`✅ Call ${callId} metadata stored successfully`);
+        // Ensure callDate is in UTC format
+        let callDate = callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString();
+        
+        // If the date doesn't end with 'Z' or have timezone info, assume it's UTC
+        if (!callDate.endsWith('Z') && !callDate.includes('+') && !callDate.includes('-', 10)) {
+          // Add 'Z' to indicate UTC if not present
+          callDate = callDate.endsWith('Z') ? callDate : callDate + 'Z';
+        }
+        
+        // Convert to proper UTC ISO string
+        callDate = new Date(callDate).toISOString();
 
-      return NextResponse.json({
-        success: true,
-        message: "Call completed event processed",
-        call_id: callId,
-        classification: {
-          outcome: classification.outcome,
-          booked: classification.booked,
+        // Get AI classification (with null transcript initially)
+        const classification = await classifyCallWithClaude(
+          "",
+          duration,
+          callDate,
+          callerNumber,
+        );
+
+        const finalData = {
+          call_id: callId,
+          caller_number: callerNumber,
+          receiver_number: receiverNumber,
+          direction: direction,
+          duration: duration,
+          call_date: callDate,
+          transcript: null,
+          classified_as_outcome: classification.outcome,
+          classified_as_booked: classification.booked,
           service_type: classification.service_type,
-          pipeline: classification.pipeline_stage,
+          pipeline_stage: classification.pipeline_stage,
           sentiment: classification.sentiment,
-          emergency: classification.is_emergency,
-        },
-      });
-    }
+          is_emergency: classification.is_emergency,
+          ai_confidence: classification.confidence_score / 100,
+          ai_summary: classification.summary,
+          notes: classification.notes,
+          pulled_at: new Date().toISOString(),
+        };
 
-    // ============================================================
-    // 2️⃣ Handle call.transcript.completed events
-    // ============================================================
-    console.log("🔍 DEBUG: Checking call.transcript.completed handler for event type:", eventType);
-    if (eventType === "call.transcript.completed") {
-      console.log(
-        "[OpenPhone Webhook] Received call.transcript.completed with data:",
-        JSON.stringify(callData, null, 2)
-      );
+        // console.log("Final object sent to Supabase (call.completed):", finalData);
 
-      console.log(
-        "[OpenPhone] transcript:", callData.transcript,
-        "| transcription.text:", callData.transcription?.text,
-        "| callTranscript.dialogue length:", Array.isArray(callData.callTranscript?.dialogue) ? callData.callTranscript.dialogue.length : "N/A",
-        "| recording.transcript:", callData.recording?.transcript
-      );
+        const { error: insertError } = await supabase
+          .from("openphone_calls")
+          .upsert(finalData);
 
-      let transcriptText = null;
-      if (callData.transcript && typeof callData.transcript === "string" && callData.transcript.length > 0) {
-        transcriptText = callData.transcript;
-      } else if (callData.transcription?.text && callData.transcription.text.length > 0) {
-        transcriptText = callData.transcription.text;
-      } else if (Array.isArray(callData.callTranscript?.dialogue) && callData.callTranscript.dialogue.length > 0) {
-        transcriptText = callData.callTranscript.dialogue
-          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
-          .join("\n");
-      } else if (callData.recording?.transcript && typeof callData.recording.transcript === "string" && callData.recording.transcript.length > 0) {
-        transcriptText = callData.recording.transcript;
-      }
+        if (insertError) {
+          console.error("Database insertion error:", insertError);
+          return NextResponse.json(
+            { error: "Failed to save call data", details: insertError.message },
+            { status: 500 },
+          );
+        }
 
-      if (!transcriptText) {
-        console.warn("[OpenPhone Webhook] No transcript text found in payload keys. Payload:", JSON.stringify(callData, null, 2));
+        console.log(`✅ Call ${callId} metadata stored successfully`);
+        console.log(`[OpenPhone] ✅ call.completed processed`, { callId, duration });
+
         return NextResponse.json({
           success: true,
-          message: "Transcript event received but no text available"
+          message: "Call completed event processed",
+          call_id: callId,
+          classification: {
+            outcome: classification.outcome,
+            booked: classification.booked,
+            service_type: classification.service_type,
+            pipeline: classification.pipeline_stage,
+            sentiment: classification.sentiment,
+            emergency: classification.is_emergency,
+          },
         });
       }
 
-      console.log("Transcript extracted, length:", transcriptText.length);
+      // ============================================================
+      // 2️⃣ Handle call.transcript.completed events
+      // ============================================================
+      console.log("🔍 DEBUG: Checking call.transcript.completed handler for event type:", eventType);
+      if (eventType === "call.transcript.completed") {
+        // Remove verbose payload logs in production
+        // console.log(
+        //   "[OpenPhone Webhook] Received call.transcript.completed with data:",
+        //   JSON.stringify(callData, null, 2)
+        // );
 
-      const { data: existingCall } = await supabase
-        .from("openphone_calls")
-        .select("duration, call_date, caller_number, receiver_number")
-        .eq("call_id", callId)
-        .single();
+        // console.log(
+        //   "[OpenPhone] transcript:", callData.transcript,
+        //   "| transcription.text:", callData.transcription?.text,
+        //   "| callTranscript.dialogue length:", Array.isArray(callData.callTranscript?.dialogue) ? callData.callTranscript.dialogue.length : "N/A",
+        //   "| recording.transcript:", callData.recording?.transcript
+        // );
 
-      // Re-classify with actual transcript
-      const classification = await classifyCallWithClaude(
-        transcriptText,
-        existingCall?.duration || 0,
-        existingCall?.call_date || new Date().toISOString(),
-        existingCall?.caller_number || "Unknown",
-      );
-
-      // Extract phone number from transcript event
-      const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
-      const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
-      
-      // Enhanced duration extraction - check multiple sources
-      let duration = existingCall?.duration || 0;
-      if (callData.duration) {
-        duration = callData.duration;
-      } else if (callData.media?.[0]?.duration) {
-        duration = callData.media[0].duration;
-      } else if (callData.callTranscript?.duration) {
-        duration = callData.callTranscript.duration;
-      } else if (callData.completedAt && callData.createdAt) {
-        duration = calculateDuration(callData.createdAt, callData.completedAt);
-      }
-
-      console.log(`📊 Extracted data for ${callId}:`, {
-        callerNumber,
-        receiverNumber,
-        duration,
-        hasTranscript: !!transcriptText,
-        durationSources: {
-          callDataDuration: callData.duration,
-          mediaDuration: callData.media?.[0]?.duration,
-          transcriptDuration: callData.callTranscript?.duration,
-          calculatedDuration: callData.completedAt && callData.createdAt ? calculateDuration(callData.createdAt, callData.completedAt) : null
+        let transcriptText = null;
+        // 1. Direct transcript string
+        if (callData.transcript && typeof callData.transcript === "string" && callData.transcript.length > 0) {
+          transcriptText = callData.transcript;
+        // 2. Transcription.text fallback
+        } else if (callData.transcription?.text && callData.transcription.text.length > 0) {
+          transcriptText = callData.transcription.text;
+        // 3. New OpenPhone schema: dialogue array directly under object
+        } else if (Array.isArray(callData.dialogue) && callData.dialogue.length > 0) {
+          transcriptText = callData.dialogue.map((d: any) => `Speaker ${d.speaker}: ${d.content}`).join("\n");
+        // 4. Old OpenPhone schema: callTranscript.dialogue
+        } else if (Array.isArray(callData.callTranscript?.dialogue) && callData.callTranscript.dialogue.length > 0) {
+          transcriptText = callData.callTranscript.dialogue.map((d: any) => `Speaker ${d.speaker}: ${d.content}`).join("\n");
+        // 5. Fallback: recording.transcript
+        } else if (callData.recording?.transcript && typeof callData.recording.transcript === "string" && callData.recording.transcript.length > 0) {
+          transcriptText = callData.recording.transcript;
         }
-      });
 
-      const updateData = {
-        transcript: transcriptText,
-        caller_number: callerNumber,
-        receiver_number: receiverNumber,
-        duration: duration,
-        classified_as_outcome: classification.outcome,
-        classified_as_booked: classification.booked,
-        service_type: classification.service_type,
-        pipeline_stage: classification.pipeline_stage,
-        sentiment: classification.sentiment,
-        is_emergency: classification.is_emergency,
-        ai_confidence: classification.confidence_score / 100,
-        ai_summary: classification.summary,
-        notes: classification.notes,
-      };
+        // Call ID extraction (prefer new OpenPhone schema callId, then old id, then fallback)
+        const callId = callData.callId || callData.id || `openphone-${Date.now()}`;
 
-      console.log(
-        "Final object sent to Supabase (transcript update):",
-        updateData,
-      );
+        if (!transcriptText) {
+          console.warn("[OpenPhone] ⚠️ transcript missing in event", {
+            callId,
+            dialogueCount: Array.isArray(callData.dialogue) ? callData.dialogue.length : (Array.isArray(callData.callTranscript?.dialogue) ? callData.callTranscript.dialogue.length : 0)
+          });
+          return NextResponse.json({ success: true, message: "Transcript event received but no text available" });
+        }
 
-      const { error: updateError } = await supabase
-        .from("openphone_calls")
-        .update(updateData)
-        .eq("call_id", callId);
+        // Concise info log for transcript extraction success
+        console.log(`[OpenPhone] ✅ transcript extracted`, { callId, length: transcriptText.length });
 
-      if (updateError) {
-        console.error("Database update error:", updateError);
-        return NextResponse.json(
-          {
-            error: "Failed to update transcript",
-            details: updateError.message,
-          },
-          { status: 500 },
-        );
-      }
-
-      console.log(`✅ Call ${callId} transcript and classification updated`);
-
-      return NextResponse.json({
-        success: true,
-        message: "Transcript processed and call updated",
-        call_id: callId,
-        classification: {
-          outcome: classification.outcome,
-          booked: classification.booked,
-          service_type: classification.service_type,
-          pipeline: classification.pipeline_stage,
-          sentiment: classification.sentiment,
-          emergency: classification.is_emergency,
-          confidence: classification.confidence_score,
-        },
-      });
-    }
-
-    // ============================================================
-    // 3️⃣ Handle call.recording.completed events
-    // ============================================================
-    console.log("🔍 DEBUG: Checking event type:", eventType, "for recording handler");
-    if (eventType === "call.recording.completed") {
-      console.log("🎥 Processing call.recording.completed event for call:", callId);
-      console.log("⚡ ACTION: CHECK FOR TRANSCRIPT IN RECORDING EVENT");
-      
-      // Check if this recording event contains transcript data
-      let transcriptText = callData.transcript || callData.transcription?.text || null;
-      
-      if (!transcriptText && callData.callTranscript?.dialogue) {
-        transcriptText = callData.callTranscript.dialogue
-          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
-          .join("\n");
-      }
-      
-      if (transcriptText) {
-        console.log("📝 Found transcript in recording event, processing...");
-        
-        // Update existing call with transcript
         const { data: existingCall } = await supabase
           .from("openphone_calls")
           .select("duration, call_date, caller_number, receiver_number")
           .eq("call_id", callId)
           .single();
 
-        if (existingCall) {
-          // Re-classify with actual transcript
-          const classification = await classifyCallWithClaude(
-            transcriptText,
-            existingCall?.duration || 0,
-            existingCall?.call_date || new Date().toISOString(),
-            existingCall?.caller_number || "Unknown",
-          );
+        // Re-classify with actual transcript
+        const classification = await classifyCallWithClaude(
+          transcriptText,
+          existingCall?.duration || 0,
+          existingCall?.call_date || new Date().toISOString(),
+          existingCall?.caller_number || "Unknown",
+        );
 
-          // Extract phone number from recording event
-          const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
-          const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
-          
-          // Enhanced duration extraction - check multiple sources
-          let duration = existingCall?.duration || 0;
-          if (callData.duration) {
-            duration = callData.duration;
-          } else if (callData.media?.[0]?.duration) {
-            duration = callData.media[0].duration;
-          } else if (callData.callTranscript?.duration) {
-            duration = callData.callTranscript.duration;
-          } else if (callData.completedAt && callData.createdAt) {
-            duration = calculateDuration(callData.createdAt, callData.completedAt);
-          }
-
-          console.log(`📊 Recording event - Extracted data for ${callId}:`, {
-            callerNumber,
-            receiverNumber,
-            duration,
-            hasTranscript: !!transcriptText,
-            durationSources: {
-              callDataDuration: callData.duration,
-              mediaDuration: callData.media?.[0]?.duration,
-              transcriptDuration: callData.callTranscript?.duration,
-              calculatedDuration: callData.completedAt && callData.createdAt ? calculateDuration(callData.createdAt, callData.completedAt) : null
-            }
-          });
-
-          const updateData = {
-            transcript: transcriptText,
-            caller_number: callerNumber,
-            receiver_number: receiverNumber,
-            duration: duration,
-            classified_as_outcome: classification.outcome,
-            classified_as_booked: classification.booked,
-            service_type: classification.service_type,
-            pipeline_stage: classification.pipeline_stage,
-            sentiment: classification.sentiment,
-            is_emergency: classification.is_emergency,
-            ai_confidence: classification.confidence_score / 100,
-            ai_summary: classification.summary,
-            notes: classification.notes,
-          };
-
-          const { error: updateError } = await supabase
-            .from("openphone_calls")
-            .update(updateData)
-            .eq("call_id", callId);
-
-          if (updateError) {
-            console.error("Database update error:", updateError);
-            return NextResponse.json(
-              {
-                error: "Failed to update transcript",
-                details: updateError.message,
-              },
-              { status: 500 },
-            );
-          }
-
-          console.log(`✅ Call ${callId} transcript updated from recording event`);
-          return NextResponse.json({
-            success: true,
-            message: "Recording event processed and transcript updated",
-            call_id: callId,
-            classification: {
-              outcome: classification.outcome,
-              booked: classification.booked,
-              service_type: classification.service_type,
-              pipeline: classification.pipeline_stage,
-              sentiment: classification.sentiment,
-              emergency: classification.is_emergency,
-              confidence: classification.confidence_score,
-            },
-          });
+        // Extract phone number from transcript event
+        const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
+        const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
+        
+        // Enhanced duration extraction - check multiple sources
+        let duration = existingCall?.duration || 0;
+        if (callData.duration) {
+          duration = callData.duration;
+        } else if (callData.media?.[0]?.duration) {
+          duration = callData.media[0].duration;
+        } else if (callData.callTranscript?.duration) {
+          duration = callData.callTranscript.duration;
+        } else if (callData.completedAt && callData.createdAt) {
+          duration = calculateDuration(callData.createdAt, callData.completedAt);
         }
+
+        // Removed verbose extracted-data log in production
+        // console.log(`📊 Extracted data for ${callId}:`, { callerNumber, receiverNumber, duration, hasTranscript: !!transcriptText });
+
+        const updateData = {
+          transcript: transcriptText,
+          caller_number: callerNumber,
+          receiver_number: receiverNumber,
+          duration: duration,
+          classified_as_outcome: classification.outcome,
+          classified_as_booked: classification.booked,
+          service_type: classification.service_type,
+          pipeline_stage: classification.pipeline_stage,
+          sentiment: classification.sentiment,
+          is_emergency: classification.is_emergency,
+          ai_confidence: classification.confidence_score / 100,
+          ai_summary: classification.summary,
+          notes: classification.notes,
+        };
+
+        // console.log("Final object sent to Supabase (transcript update):", updateData);
+
+        const { error: updateError } = await supabase
+          .from("openphone_calls")
+          .update(updateData)
+          .eq("call_id", callId);
+
+        if (updateError) {
+          console.error("[OpenPhone] ❌ transcript update failed", { callId, error: updateError.message });
+          return NextResponse.json(
+            {
+              error: "Failed to update transcript",
+              details: updateError.message,
+            },
+            { status: 500 },
+          );
+        }
+
+        console.log(`[OpenPhone] ✅ transcript processed`, { callId, transcriptLength: transcriptText.length, duration });
+
+        return NextResponse.json({
+          success: true,
+          message: "Transcript processed and call updated",
+          call_id: callId,
+          classification: {
+            outcome: classification.outcome,
+            booked: classification.booked,
+            service_type: classification.service_type,
+            pipeline: classification.pipeline_stage,
+            sentiment: classification.sentiment,
+            emergency: classification.is_emergency,
+            confidence: classification.confidence_score,
+          },
+        });
       }
-      
-      console.log("📝 No transcript found in recording event");
+
+      // ============================================================
+      // 3️⃣ Handle call.recording.completed events
+      // ============================================================
+      console.log("🔍 DEBUG: Checking event type:", eventType, "for recording handler");
+      if (eventType === "call.recording.completed") {
+        console.log("🎥 Processing call.recording.completed event for call:", callId);
+        console.log("⚡ ACTION: CHECK FOR TRANSCRIPT IN RECORDING EVENT");
+        
+        // Check if this recording event contains transcript data
+        let transcriptText = callData.transcript || callData.transcription?.text || null;
+        
+        if (!transcriptText && callData.callTranscript?.dialogue) {
+          transcriptText = callData.callTranscript.dialogue
+            .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
+            .join("\n");
+        }
+        
+        if (transcriptText) {
+          console.log("📝 Found transcript in recording event, processing...");
+          
+          // Update existing call with transcript
+          const { data: existingCall } = await supabase
+            .from("openphone_calls")
+            .select("duration, call_date, caller_number, receiver_number")
+            .eq("call_id", callId)
+            .single();
+
+          if (existingCall) {
+            // Re-classify with actual transcript
+            const classification = await classifyCallWithClaude(
+              transcriptText,
+              existingCall?.duration || 0,
+              existingCall?.call_date || new Date().toISOString(),
+              existingCall?.caller_number || "Unknown",
+            );
+
+            // Extract phone number from recording event
+            const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
+            const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
+            
+            // Enhanced duration extraction - check multiple sources
+            let duration = existingCall?.duration || 0;
+            if (callData.duration) {
+              duration = callData.duration;
+            } else if (callData.media?.[0]?.duration) {
+              duration = callData.media[0].duration;
+            } else if (callData.callTranscript?.duration) {
+              duration = callData.callTranscript.duration;
+            } else if (callData.completedAt && callData.createdAt) {
+              duration = calculateDuration(callData.createdAt, callData.completedAt);
+            }
+
+            // console.log(`📊 Recording event - Extracted data for ${callId}:`, { callerNumber, receiverNumber, duration, hasTranscript: !!transcriptText });
+
+            const updateData = {
+              transcript: transcriptText,
+              caller_number: callerNumber,
+              receiver_number: receiverNumber,
+              duration: duration,
+              classified_as_outcome: classification.outcome,
+              classified_as_booked: classification.booked,
+              service_type: classification.service_type,
+              pipeline_stage: classification.pipeline_stage,
+              sentiment: classification.sentiment,
+              is_emergency: classification.is_emergency,
+              ai_confidence: classification.confidence_score / 100,
+              ai_summary: classification.summary,
+              notes: classification.notes,
+            };
+
+            const { error: updateError } = await supabase
+              .from("openphone_calls")
+              .update(updateData)
+              .eq("call_id", callId);
+
+            if (updateError) {
+              console.error("Database update error:", updateError);
+              return NextResponse.json(
+                {
+                  error: "Failed to update transcript",
+                  details: updateError.message,
+                },
+                { status: 500 },
+              );
+            }
+
+            console.log(`✅ Call ${callId} transcript updated from recording event`);
+            return NextResponse.json({
+              success: true,
+              message: "Recording event processed and transcript updated",
+              call_id: callId,
+              classification: {
+                outcome: classification.outcome,
+                booked: classification.booked,
+                service_type: classification.service_type,
+                pipeline: classification.pipeline_stage,
+                sentiment: classification.sentiment,
+                emergency: classification.is_emergency,
+                confidence: classification.confidence_score,
+              },
+            });
+          }
+        }
+        
+        console.log("📝 No transcript found in recording event");
+        return NextResponse.json({
+          success: true,
+          message: "Recording event processed (no transcript)",
+          call_id: callId,
+          event_type: eventType,
+        });
+      }
+
+      // ============================================================
+      // 4️⃣ Handle other call events (ringing, answered, ended, failed)
+      // ============================================================
+      if (eventType === "call.ringing" || eventType === "call.answered" || 
+          eventType === "call.ended" || eventType === "call.failed") {
+        console.log(`📞 Processing ${eventType} event for call:`, callId);
+        console.log("⚡ ACTION: LOGGING ONLY - These events don't create database records");
+        
+        // For now, just log these events - they don't need database storage
+        // but we can use them for analytics or debugging
+        console.log(`Call ${callId} event: ${eventType}`);
+        
+        return NextResponse.json({
+          success: true,
+          message: `${eventType} event logged`,
+          call_id: callId,
+          event_type: eventType,
+        });
+      }
+
+      // ============================================================
+      // Handle unknown/test events
+      // ============================================================
+      console.log("⚠️  Unhandled webhook event type:", eventType);
+
       return NextResponse.json({
         success: true,
-        message: "Recording event processed (no transcript)",
-        call_id: callId,
+        message: "Webhook received but not processed",
         event_type: eventType,
+        debug: {
+          eventType: eventType,
+          eventTypeLength: eventType?.length,
+          isCallRecordingCompleted: eventType === "call.recording.completed",
+          charCodes: eventType?.split('').map((c: string) => c.charCodeAt(0))
+        }
       });
     }
-
-    // ============================================================
-    // 4️⃣ Handle other call events (ringing, answered, ended, failed)
-    // ============================================================
-    if (eventType === "call.ringing" || eventType === "call.answered" || 
-        eventType === "call.ended" || eventType === "call.failed") {
-      console.log(`📞 Processing ${eventType} event for call:`, callId);
-      console.log("⚡ ACTION: LOGGING ONLY - These events don't create database records");
-      
-      // For now, just log these events - they don't need database storage
-      // but we can use them for analytics or debugging
-      console.log(`Call ${callId} event: ${eventType}`);
-      
-      return NextResponse.json({
-        success: true,
-        message: `${eventType} event logged`,
-        call_id: callId,
-        event_type: eventType,
-      });
-    }
-
-    // ============================================================
-    // Handle unknown/test events
-    // ============================================================
-    console.log("⚠️  Unhandled webhook event type:", eventType);
-
-    return NextResponse.json({
-      success: true,
-      message: "Webhook received but not processed",
-      event_type: eventType,
-      debug: {
-        eventType: eventType,
-        eventTypeLength: eventType?.length,
-        isCallRecordingCompleted: eventType === "call.recording.completed",
-        charCodes: eventType?.split('').map((c: string) => c.charCodeAt(0))
-      }
-    });
-  }
 
   } catch (error) {
     console.error("OpenPhone webhook error:", error);
