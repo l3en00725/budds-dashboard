@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/sync/jobber",
-      "schedule": "0 1 * * *"
-    },
-    {
       "path": "/api/sync/quickbooks",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/validate-bookings",
-      "schedule": "0 3 * * *"
     }
   ]
 }
