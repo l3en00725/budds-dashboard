@@ -226,25 +226,35 @@ export async function POST(request: NextRequest) {
     console.log("🔍 DEBUG: Checking call.transcript.completed handler for event type:", eventType);
     if (eventType === "call.transcript.completed") {
       console.log(
-        "📝 Processing call.transcript.completed event for call:",
-        callId,
+        "[OpenPhone Webhook] Received call.transcript.completed with data:",
+        JSON.stringify(callData, null, 2)
       );
-      console.log("⚡ ACTION: UPDATE openphone_calls with transcript");
 
-      let transcriptText =
-        callData.transcript || callData.transcription?.text || null;
+      console.log(
+        "[OpenPhone] transcript:", callData.transcript,
+        "| transcription.text:", callData.transcription?.text,
+        "| callTranscript.dialogue length:", Array.isArray(callData.callTranscript?.dialogue) ? callData.callTranscript.dialogue.length : "N/A",
+        "| recording.transcript:", callData.recording?.transcript
+      );
 
-      if (!transcriptText && callData.callTranscript?.dialogue) {
+      let transcriptText = null;
+      if (callData.transcript && typeof callData.transcript === "string" && callData.transcript.length > 0) {
+        transcriptText = callData.transcript;
+      } else if (callData.transcription?.text && callData.transcription.text.length > 0) {
+        transcriptText = callData.transcription.text;
+      } else if (Array.isArray(callData.callTranscript?.dialogue) && callData.callTranscript.dialogue.length > 0) {
         transcriptText = callData.callTranscript.dialogue
-          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
+          .map((d) => `Speaker ${d.speaker}: ${d.content}`)
           .join("\n");
+      } else if (callData.recording?.transcript && typeof callData.recording.transcript === "string" && callData.recording.transcript.length > 0) {
+        transcriptText = callData.recording.transcript;
       }
 
       if (!transcriptText) {
-        console.warn("Transcript event received but no transcript text found");
+        console.warn("[OpenPhone Webhook] No transcript text found in payload keys. Payload:", JSON.stringify(callData, null, 2));
         return NextResponse.json({
           success: true,
-          message: "Transcript event received but no text available",
+          message: "Transcript event received but no text available"
         });
       }
 
