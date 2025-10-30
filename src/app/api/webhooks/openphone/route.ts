@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     // Log event type BEFORE any processing
     console.log("📥 EVENT TYPE:", eventType);
     console.log("📥 EVENT TYPE LENGTH:", eventType?.length);
-    console.log("📥 EVENT TYPE CHAR CODES:", eventType?.split('').map(c => c.charCodeAt(0)));
+    console.log("📥 EVENT TYPE CHAR CODES:", eventType?.split('').map((c: string) => c.charCodeAt(0)));
 
     // Filter out SMS events - will be tracked separately in future SMS Analytics feature
     if (eventType === "message.received" || eventType === "message.delivered") {
@@ -146,9 +146,39 @@ export async function POST(request: NextRequest) {
         callData.direction === "incoming"
           ? "inbound"
           : callData.direction || "inbound";
-      const duration = Math.round(
-        callData.callTranscript?.duration || callData.duration || 0,
+      console.log("🔍 OpenPhone call payload (call.completed):", JSON.stringify(callData, null, 2));
+
+      // Robust duration extraction from multiple sources
+      let duration: number = 0;
+      const computedFromTimestamps = (callData.completedAt && callData.createdAt)
+        ? Math.max(0, Math.round((new Date(callData.completedAt).getTime() - new Date(callData.createdAt).getTime()) / 1000))
+        : undefined;
+      duration = (
+        callData.duration ??
+        callData.callDuration ??
+        callData.media?.[0]?.duration ??
+        callData.callTranscript?.duration ??
+        callData.metadata?.duration ??
+        callData.call?.duration ??
+        computedFromTimestamps ??
+        0
       );
+      if (!Number.isFinite(duration) || duration < 0) duration = 0;
+      console.log("⏱ Calculated duration (call.completed)", {
+        duration,
+        sources: {
+          callDataDuration: callData.duration,
+          callDuration: callData.callDuration,
+          mediaDuration: callData.media?.[0]?.duration,
+          transcriptDuration: callData.callTranscript?.duration,
+          metadataDuration: callData.metadata?.duration,
+          nestedCallDuration: callData.call?.duration,
+          computedFromTimestamps,
+          createdAt: callData.createdAt,
+          completedAt: callData.completedAt
+        }
+      });
+      
       // Ensure callDate is in UTC format
       let callDate = callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString();
       
@@ -244,7 +274,7 @@ export async function POST(request: NextRequest) {
         transcriptText = callData.transcription.text;
       } else if (Array.isArray(callData.callTranscript?.dialogue) && callData.callTranscript.dialogue.length > 0) {
         transcriptText = callData.callTranscript.dialogue
-          .map((d) => `Speaker ${d.speaker}: ${d.content}`)
+          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
           .join("\n");
       } else if (callData.recording?.transcript && typeof callData.recording.transcript === "string" && callData.recording.transcript.length > 0) {
         transcriptText = callData.recording.transcript;
@@ -262,7 +292,7 @@ export async function POST(request: NextRequest) {
 
       const { data: existingCall } = await supabase
         .from("openphone_calls")
-        .select("duration, call_date, caller_number")
+        .select("duration, call_date, caller_number, receiver_number")
         .eq("call_id", callId)
         .single();
 
@@ -381,7 +411,7 @@ export async function POST(request: NextRequest) {
         // Update existing call with transcript
         const { data: existingCall } = await supabase
           .from("openphone_calls")
-          .select("duration, call_date, caller_number")
+          .select("duration, call_date, caller_number, receiver_number")
           .eq("call_id", callId)
           .single();
 
@@ -515,7 +545,7 @@ export async function POST(request: NextRequest) {
         eventType: eventType,
         eventTypeLength: eventType?.length,
         isCallRecordingCompleted: eventType === "call.recording.completed",
-        charCodes: eventType?.split('').map(c => c.charCodeAt(0))
+        charCodes: eventType?.split('').map((c: string) => c.charCodeAt(0))
       }
     });
   }
