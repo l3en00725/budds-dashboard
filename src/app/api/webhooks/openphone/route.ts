@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
             : callData.direction || "inbound";
         // console.log("🔍 OpenPhone call payload (call.completed):", JSON.stringify(callData, null, 2));
 
-        // Robust duration extraction from multiple sources
+        // Robust duration extraction from multiple sources (call.completed handler)
         let duration: number = 0;
         const computedFromTimestamps = (callData.completedAt && callData.createdAt)
           ? Math.max(0, Math.round((new Date(callData.completedAt).getTime() - new Date(callData.createdAt).getTime()) / 1000))
@@ -162,7 +162,9 @@ export async function POST(request: NextRequest) {
           computedFromTimestamps ??
           0
         );
+        duration = Math.round(Number(duration));
         if (!Number.isFinite(duration) || duration < 0) duration = 0;
+        console.log(`[OpenPhone] 🕑 normalized duration`, { callId, duration });
 
         // Ensure callDate is in UTC format
         let callDate = callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString();
@@ -304,7 +306,7 @@ export async function POST(request: NextRequest) {
         const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
         const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
         
-        // Enhanced duration extraction - check multiple sources
+        // Enhanced duration extraction - check multiple sources (transcript.completed handler)
         let duration = existingCall?.duration || 0;
         if (callData.duration) {
           duration = callData.duration;
@@ -315,6 +317,9 @@ export async function POST(request: NextRequest) {
         } else if (callData.completedAt && callData.createdAt) {
           duration = calculateDuration(callData.createdAt, callData.completedAt);
         }
+        duration = Math.round(Number(duration));
+        if (!Number.isFinite(duration) || duration < 0) duration = 0;
+        console.log(`[OpenPhone] 🕑 normalized duration`, { callId, duration });
 
         // Removed verbose extracted-data log in production
         // console.log(`📊 Extracted data for ${callId}:`, { callerNumber, receiverNumber, duration, hasTranscript: !!transcriptText });
@@ -411,7 +416,7 @@ export async function POST(request: NextRequest) {
             const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
             const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
             
-            // Enhanced duration extraction - check multiple sources
+            // Enhanced duration extraction - check multiple sources (recording event handler)
             let duration = existingCall?.duration || 0;
             if (callData.duration) {
               duration = callData.duration;
@@ -422,6 +427,9 @@ export async function POST(request: NextRequest) {
             } else if (callData.completedAt && callData.createdAt) {
               duration = calculateDuration(callData.createdAt, callData.completedAt);
             }
+            duration = Math.round(Number(duration));
+            if (!Number.isFinite(duration) || duration < 0) duration = 0;
+            console.log(`[OpenPhone] 🕑 normalized duration`, { callId, duration });
 
             // console.log(`📊 Recording event - Extracted data for ${callId}:`, { callerNumber, receiverNumber, duration, hasTranscript: !!transcriptText });
 
