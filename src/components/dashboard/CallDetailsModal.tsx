@@ -63,7 +63,13 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
   };
 
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+    // Ensure the date string is treated as UTC if no timezone info
+    let isoString = dateString;
+    if (!dateString.endsWith('Z') && !dateString.includes('+') && !dateString.includes('-', 10)) {
+      isoString = dateString + 'Z';
+    }
+    
+    const date = new Date(isoString);
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',

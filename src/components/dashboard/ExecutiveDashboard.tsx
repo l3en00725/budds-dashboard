@@ -3,7 +3,6 @@
 import React from 'react';
 import { DashboardMetrics } from '@/lib/dashboard-service';
 import { CircularKPI } from './CircularKPI';
-import { ARAgingChart } from './ARAgingChart';
 
 interface ExecutiveDashboardProps {
   metrics: DashboardMetrics['executiveMetrics'];

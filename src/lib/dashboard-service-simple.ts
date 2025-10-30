@@ -90,9 +90,7 @@ export class DashboardService {
         'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
       .gte('call_date', todayStart.toISOString())
-      .lt('call_date', tomorrowStart.toISOString())
-      .not('call_id', 'like', 'test%')
-      .not('call_id', 'like', 'ACtest%');
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Get this week's calls - include direction field
     const { data: thisWeekCalls } = await supabase
@@ -101,9 +99,7 @@ export class DashboardService {
         'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
       .gte('call_date', weekStart)
-      .lt('call_date', tomorrowStart.toISOString())
-      .not('call_id', 'like', 'test%')
-      .not('call_id', 'like', 'ACtest%');
+      .lt('call_date', tomorrowStart.toISOString());
 
     // Get last week's calls for comparison - include direction field
     const { data: lastWeekCalls } = await supabase
@@ -112,9 +108,7 @@ export class DashboardService {
         'classified_as_booked, ai_confidence, transcript, duration, caller_number, is_emergency, service_type, sentiment, direction',
       )
       .gte('call_date', lastWeekStart.toISOString())
-      .lt('call_date', lastWeekEnd.toISOString())
-      .not('call_id', 'like', 'test%')
-      .not('call_id', 'like', 'ACtest%');
+      .lt('call_date', lastWeekEnd.toISOString());
 
     // Process today's data
     const todayData = this.processCallData(todayCalls || []);
@@ -217,10 +211,7 @@ export class DashboardService {
       (call) =>
         (call.duration || 0) >= 30 && // Not a hangup/missed call
         !call.caller_number?.toLowerCase().includes('spam') && // Not marked as spam
-        !call.caller_number?.startsWith('AC') && // Not call ID format
-        (call.transcript?.length || 0) > 50 && // Had actual conversation
-        call.transcript !== null && // Has transcript
-        call.transcript !== '' // Not empty
+        (call.transcript?.length || 0) > 50, // Had actual conversation
     );
 
     // Only count inbound calls for appointments booked
@@ -278,15 +269,9 @@ export class DashboardService {
         );
       }).length || 0;
 
-    // Use ai_confidence (0-1 decimal), convert to percentage - only for calls with transcripts
+    // Use ai_confidence (0-1 decimal), convert to percentage
     const confidenceScores =
       calls
-        ?.filter((call) => 
-          call.transcript && 
-          call.transcript !== '' && 
-          call.transcript !== null &&
-          !call.caller_number?.startsWith('AC') // Not call ID format
-        )
         ?.map((call) => {
           const confidence = call.ai_confidence || 0;
           // If confidence is already 0-1, multiply by 100; if it's 0-100, use as-is

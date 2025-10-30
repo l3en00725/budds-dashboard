@@ -25,15 +25,16 @@ export function CallAnalyticsWidget({ data }: CallAnalyticsWidgetProps) {
   }>({ title: "", calls: [], color: "purple" });
   const [loading, setLoading] = useState(false);
 
+  // Fix: Use qualified inbound calls for conversion rate (not total calls which includes outbound)
   const conversionRate =
-    data.today.totalCalls > 0
+    data.today.qualifiedInboundCalls > 0
       ? Math.round(
-          (data.today.appointmentsBooked / data.today.totalCalls) * 100,
+          (data.today.appointmentsBooked / data.today.qualifiedInboundCalls) * 100,
         )
       : 0;
   const positiveRate =
-    data.today.totalCalls > 0
-      ? Math.round((data.today.positivesentiment / data.today.totalCalls) * 100)
+    data.today.inboundCalls > 0
+      ? Math.round((data.today.positivesentiment / data.today.inboundCalls) * 100)
       : 0;
 
   const fetchCallDetails = async (category: string) => {

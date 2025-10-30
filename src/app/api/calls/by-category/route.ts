@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
       .select('*')
       .gte('call_date', todayStart.toISOString())
       .lt('call_date', tomorrowStart.toISOString())
+      .not('call_id', 'like', 'test%')         // Exclude test calls
+      .not('call_id', 'like', 'ACtest%')       // Exclude test calls
       .order('call_date', { ascending: false });
 
     // Filter by category

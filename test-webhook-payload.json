@@ -1,0 +1,23 @@
+{
+  "object": {
+    "type": "call.transcript.completed",
+    "data": {
+      "object": {
+        "id": "test-call-123",
+        "transcript": "Hello, I need help with my water heater. It is not working properly and I need someone to come out and fix it.",
+        "callTranscript": {
+          "dialogue": [
+            {
+              "speaker": "customer",
+              "content": "Hello, I need help with my water heater"
+            },
+            {
+              "speaker": "agent", 
+              "content": "I can help you with that. What seems to be the problem?"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -28,13 +28,56 @@ export async function POST(request: NextRequest) {
       JSON.stringify(payload, null, 2),
     );
 
-    const supabase = createServiceRoleClient();
-
     // Get event type from payload - OpenPhone sends it in different locations
     const eventType = payload.object?.type || payload.event || payload.type;
 
+    // Enhanced debugging for event types
+    console.log("🔍 WEBHOOK DEBUG INFO:");
+    console.log("📥 Raw event type:", eventType);
+    console.log("📦 Payload structure:", {
+      hasObject: !!payload.object,
+      hasData: !!payload.data,
+      hasEvent: !!payload.event,
+      hasType: !!payload.type,
+      objectType: payload.object?.type,
+      dataObject: payload.data?.object?.id || payload.data?.id,
+    });
+
+    // Comprehensive OpenPhone diagnostics
+    console.log('📥 OpenPhone webhook:', {
+      eventType,
+      callId: payload.data?.object?.id || payload.data?.id,
+      hasTranscript: !!payload?.data?.object?.callTranscript,
+      hasDuration: !!payload?.data?.object?.duration,
+      hasMedia: !!payload?.data?.object?.media?.[0]?.duration,
+      transcriptLength: payload?.data?.object?.callTranscript?.dialogue?.length || 0,
+      mediaDuration: payload?.data?.object?.media?.[0]?.duration,
+      callDuration: payload?.data?.object?.duration,
+      createdAt: payload?.data?.object?.createdAt,
+      completedAt: payload?.data?.object?.completedAt,
+      from: payload?.data?.object?.from,
+      to: payload?.data?.object?.to,
+      direction: payload?.data?.object?.direction,
+      status: payload?.data?.object?.status
+    });
+
+    // Log to webhook logger for debugging
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/debug/webhook-logger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (logError) {
+      console.warn('Failed to log webhook to debug endpoint:', logError);
+    }
+
+    const supabase = createServiceRoleClient();
+
     // Log event type BEFORE any processing
     console.log("📥 EVENT TYPE:", eventType);
+    console.log("📥 EVENT TYPE LENGTH:", eventType?.length);
+    console.log("📥 EVENT TYPE CHAR CODES:", eventType?.split('').map(c => c.charCodeAt(0)));
 
     // Filter out SMS events - will be tracked separately in future SMS Analytics feature
     if (eventType === "message.received" || eventType === "message.delivered") {
@@ -56,11 +99,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle call events only (call.completed, call.transcript.completed, call.summary.completed, etc.)
+    console.log("🔍 DEBUG: Checking main if condition for event type:", eventType);
+    console.log("🔍 DEBUG: call.recording.completed match:", eventType === "call.recording.completed");
+    
     if (
       eventType === "call.completed" ||
       eventType === "call.transcript.completed" ||
       eventType === "call.summary.completed" ||
       eventType === "call.recording.completed" ||
+      eventType === "call.ringing" ||
+      eventType === "call.answered" ||
+      eventType === "call.ended" ||
+      eventType === "call.failed" ||
       eventType === "test" ||
       !eventType
     ) {
@@ -79,6 +129,7 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // 1️⃣ Handle call.completed events
     // ============================================================
+    console.log("🔍 DEBUG: Checking call.completed handler for event type:", eventType);
     if (eventType === "call.completed") {
       console.log("📞 Processing call.completed event for call:", callId);
       console.log("⚡ ACTION: UPSERT into openphone_calls");
@@ -98,11 +149,17 @@ export async function POST(request: NextRequest) {
       const duration = Math.round(
         callData.callTranscript?.duration || callData.duration || 0,
       );
-      const callDate =
-        callData.completedAt ||
-        callData.createdAt ||
-        callData.startedAt ||
-        new Date().toISOString();
+      // Ensure callDate is in UTC format
+      let callDate = callData.completedAt || callData.createdAt || callData.startedAt || new Date().toISOString();
+      
+      // If the date doesn't end with 'Z' or have timezone info, assume it's UTC
+      if (!callDate.endsWith('Z') && !callDate.includes('+') && !callDate.includes('-', 10)) {
+        // Add 'Z' to indicate UTC if not present
+        callDate = callDate.endsWith('Z') ? callDate : callDate + 'Z';
+      }
+      
+      // Convert to proper UTC ISO string
+      callDate = new Date(callDate).toISOString();
 
       // Get AI classification (with null transcript initially)
       const classification = await classifyCallWithClaude(
@@ -166,6 +223,7 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // 2️⃣ Handle call.transcript.completed events
     // ============================================================
+    console.log("🔍 DEBUG: Checking call.transcript.completed handler for event type:", eventType);
     if (eventType === "call.transcript.completed") {
       console.log(
         "📝 Processing call.transcript.completed event for call:",
@@ -206,8 +264,40 @@ export async function POST(request: NextRequest) {
         existingCall?.caller_number || "Unknown",
       );
 
+      // Extract phone number from transcript event
+      const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
+      const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
+      
+      // Enhanced duration extraction - check multiple sources
+      let duration = existingCall?.duration || 0;
+      if (callData.duration) {
+        duration = callData.duration;
+      } else if (callData.media?.[0]?.duration) {
+        duration = callData.media[0].duration;
+      } else if (callData.callTranscript?.duration) {
+        duration = callData.callTranscript.duration;
+      } else if (callData.completedAt && callData.createdAt) {
+        duration = calculateDuration(callData.createdAt, callData.completedAt);
+      }
+
+      console.log(`📊 Extracted data for ${callId}:`, {
+        callerNumber,
+        receiverNumber,
+        duration,
+        hasTranscript: !!transcriptText,
+        durationSources: {
+          callDataDuration: callData.duration,
+          mediaDuration: callData.media?.[0]?.duration,
+          transcriptDuration: callData.callTranscript?.duration,
+          calculatedDuration: callData.completedAt && callData.createdAt ? calculateDuration(callData.createdAt, callData.completedAt) : null
+        }
+      });
+
       const updateData = {
         transcript: transcriptText,
+        caller_number: callerNumber,
+        receiver_number: receiverNumber,
+        duration: duration,
         classified_as_outcome: classification.outcome,
         classified_as_booked: classification.booked,
         service_type: classification.service_type,
@@ -259,6 +349,150 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
+    // 3️⃣ Handle call.recording.completed events
+    // ============================================================
+    console.log("🔍 DEBUG: Checking event type:", eventType, "for recording handler");
+    if (eventType === "call.recording.completed") {
+      console.log("🎥 Processing call.recording.completed event for call:", callId);
+      console.log("⚡ ACTION: CHECK FOR TRANSCRIPT IN RECORDING EVENT");
+      
+      // Check if this recording event contains transcript data
+      let transcriptText = callData.transcript || callData.transcription?.text || null;
+      
+      if (!transcriptText && callData.callTranscript?.dialogue) {
+        transcriptText = callData.callTranscript.dialogue
+          .map((d: any) => `Speaker ${d.speaker}: ${d.content}`)
+          .join("\n");
+      }
+      
+      if (transcriptText) {
+        console.log("📝 Found transcript in recording event, processing...");
+        
+        // Update existing call with transcript
+        const { data: existingCall } = await supabase
+          .from("openphone_calls")
+          .select("duration, call_date, caller_number")
+          .eq("call_id", callId)
+          .single();
+
+        if (existingCall) {
+          // Re-classify with actual transcript
+          const classification = await classifyCallWithClaude(
+            transcriptText,
+            existingCall?.duration || 0,
+            existingCall?.call_date || new Date().toISOString(),
+            existingCall?.caller_number || "Unknown",
+          );
+
+          // Extract phone number from recording event
+          const callerNumber = callData.from || callData.phoneNumber || existingCall?.caller_number || "Unknown";
+          const receiverNumber = callData.to || callData.receiverNumber || existingCall?.receiver_number || "Unknown";
+          
+          // Enhanced duration extraction - check multiple sources
+          let duration = existingCall?.duration || 0;
+          if (callData.duration) {
+            duration = callData.duration;
+          } else if (callData.media?.[0]?.duration) {
+            duration = callData.media[0].duration;
+          } else if (callData.callTranscript?.duration) {
+            duration = callData.callTranscript.duration;
+          } else if (callData.completedAt && callData.createdAt) {
+            duration = calculateDuration(callData.createdAt, callData.completedAt);
+          }
+
+          console.log(`📊 Recording event - Extracted data for ${callId}:`, {
+            callerNumber,
+            receiverNumber,
+            duration,
+            hasTranscript: !!transcriptText,
+            durationSources: {
+              callDataDuration: callData.duration,
+              mediaDuration: callData.media?.[0]?.duration,
+              transcriptDuration: callData.callTranscript?.duration,
+              calculatedDuration: callData.completedAt && callData.createdAt ? calculateDuration(callData.createdAt, callData.completedAt) : null
+            }
+          });
+
+          const updateData = {
+            transcript: transcriptText,
+            caller_number: callerNumber,
+            receiver_number: receiverNumber,
+            duration: duration,
+            classified_as_outcome: classification.outcome,
+            classified_as_booked: classification.booked,
+            service_type: classification.service_type,
+            pipeline_stage: classification.pipeline_stage,
+            sentiment: classification.sentiment,
+            is_emergency: classification.is_emergency,
+            ai_confidence: classification.confidence_score / 100,
+            ai_summary: classification.summary,
+            notes: classification.notes,
+          };
+
+          const { error: updateError } = await supabase
+            .from("openphone_calls")
+            .update(updateData)
+            .eq("call_id", callId);
+
+          if (updateError) {
+            console.error("Database update error:", updateError);
+            return NextResponse.json(
+              {
+                error: "Failed to update transcript",
+                details: updateError.message,
+              },
+              { status: 500 },
+            );
+          }
+
+          console.log(`✅ Call ${callId} transcript updated from recording event`);
+          return NextResponse.json({
+            success: true,
+            message: "Recording event processed and transcript updated",
+            call_id: callId,
+            classification: {
+              outcome: classification.outcome,
+              booked: classification.booked,
+              service_type: classification.service_type,
+              pipeline: classification.pipeline_stage,
+              sentiment: classification.sentiment,
+              emergency: classification.is_emergency,
+              confidence: classification.confidence_score,
+            },
+          });
+        }
+      }
+      
+      console.log("📝 No transcript found in recording event");
+      return NextResponse.json({
+        success: true,
+        message: "Recording event processed (no transcript)",
+        call_id: callId,
+        event_type: eventType,
+      });
+    }
+
+    // ============================================================
+    // 4️⃣ Handle other call events (ringing, answered, ended, failed)
+    // ============================================================
+    if (eventType === "call.ringing" || eventType === "call.answered" || 
+        eventType === "call.ended" || eventType === "call.failed") {
+      console.log(`📞 Processing ${eventType} event for call:`, callId);
+      console.log("⚡ ACTION: LOGGING ONLY - These events don't create database records");
+      
+      // For now, just log these events - they don't need database storage
+      // but we can use them for analytics or debugging
+      console.log(`Call ${callId} event: ${eventType}`);
+      
+      return NextResponse.json({
+        success: true,
+        message: `${eventType} event logged`,
+        call_id: callId,
+        event_type: eventType,
+      });
+    }
+
+    // ============================================================
     // Handle unknown/test events
     // ============================================================
     console.log("⚠️  Unhandled webhook event type:", eventType);
@@ -267,6 +501,12 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Webhook received but not processed",
       event_type: eventType,
+      debug: {
+        eventType: eventType,
+        eventTypeLength: eventType?.length,
+        isCallRecordingCompleted: eventType === "call.recording.completed",
+        charCodes: eventType?.split('').map(c => c.charCodeAt(0))
+      }
     });
   }
 
@@ -405,45 +645,51 @@ CALL METADATA:
 - Date: ${callDate}
 - Contact: ${contactName}
 
-CLASSIFICATION RULES:
+CLASSIFICATION RULES FOR PLUMBING/HVAC BUSINESS:
 
 1. **booked** (boolean):
-   - TRUE only if customer explicitly accepted service fee or clearly agreed to proceed
-   - Phrases like: "that's fine", "go ahead", "yes please", "sounds good", "book it"
-   - FALSE if they're just inquiring or haven't committed
+   - TRUE if customer explicitly agreed to service or accepted pricing
+   - BOOKING PHRASES: "send someone out", "what time can you be here?", "I'll be home at [time]", "how soon can you get here?", "that works for me", "go ahead", "yes please", "sounds good", "book it", "that's fine", "ok", "sure", "let's do it"
+   - PRICE ACCEPTANCE: "that's fine", "$X is okay", "sounds reasonable", "works for me"
+   - SCHEDULING: "when can you come?", "what's your availability?", "I'm available [day/time]"
+   - FALSE if just inquiring, price shopping, or no clear commitment
 
 2. **service_type** (string or null):
-   - Detect: "Plumbing", "HVAC", "Drain", "Water Heater", "Furnace", "AC Repair", etc.
-   - Be specific if possible
-   - null if unclear
+   - WATER HEATER: "water heater", "hot water tank", "no hot water", "tank leaking", "pilot light", "thermostat"
+   - HVAC: "furnace", "AC", "air conditioning", "heating", "cooling", "thermostat", "heat pump", "air handler", "ductwork"
+   - PLUMBING: "toilet", "sink", "faucet", "pipe burst", "leak", "fixture", "shower", "bathtub", "garbage disposal"
+   - DRAIN: "drain cleaning", "clogged drain", "snake", "slow drain", "backup", "sewer", "main line"
+   - GENERAL: "plumbing", "repair", "service call", "maintenance"
+   - Be specific if possible, null if unclear
 
 3. **is_emergency** (boolean):
-   - TRUE if urgent keywords: "flooding", "burst pipe", "no heat", "no hot water", "leaking badly"
-   - FALSE otherwise
+   - CRITICAL (immediate response): "flooding", "burst pipe", "water everywhere", "no heat" (winter), "gas smell", "gas leak", "basement flooded", "sewage backup", "leaking badly"
+   - URGENT (same day): "no hot water", "toilet overflowing", "leak getting worse", "AC not working" (summer), "emergency", "as soon as possible"
+   - FALSE for routine maintenance or non-urgent issues
 
 4. **sentiment** (string):
-   - "Positive" - friendly, cooperative
-   - "Neutral" - matter-of-fact
-   - "Negative" - frustrated, angry
+   - "Positive" - friendly, cooperative, satisfied, grateful
+   - "Neutral" - matter-of-fact, business-like, calm
+   - "Negative" - frustrated, angry, upset, demanding
 
 5. **pipeline_stage** (string):
-   - "Booked" - Customer agreed to service
-   - "Quote Needed" - Needs estimate first
-   - "Follow-Up" - Call back later
-   - "Inquiry" - Just asking questions
-   - "Closed-Lost" - Not interested
+   - "Booked" - Customer agreed to service and scheduling discussed
+   - "Quote Needed" - Needs estimate first, pricing discussed
+   - "Follow-Up" - Call back later, not ready to book
+   - "Inquiry" - Just asking questions, gathering information
+   - "Closed-Lost" - Not interested, price shopping, going elsewhere
 
 6. **outcome** (string):
-   - Brief description (e.g., "Booked water heater repair", "Inquiry about HVAC service", "Price shopping")
+   - Brief description: "Booked water heater repair", "Emergency drain cleaning", "HVAC maintenance inquiry", "Price shopping for plumbing"
 
 7. **summary** (string):
-   - 1-2 sentences: what happened, key details, next steps
+   - 1-2 sentences: what happened, key details, next steps, urgency level
 
 8. **notes** (string):
-   - Important details: address mentioned, preferred times, special requests, concerns
+   - Important details: address mentioned, preferred times, special requests, concerns, urgency level, specific symptoms
 
 9. **confidence_score** (0-100):
-   - How confident are you in this classification?
+   - How confident are you in this classification? Consider transcript clarity and explicit language
 
 RESPONSE (JSON only, no markdown):
 {
@@ -516,47 +762,86 @@ RESPONSE (JSON only, no markdown):
 
     // Fall back to keyword-based classification when API fails
     const bookedKeywords = [
-      "that's fine",
+      "send someone out",
+      "what time can you be here",
+      "i'll be home at",
+      "how soon can you get here",
+      "that works for me",
       "go ahead",
-      "sounds good",
       "yes please",
+      "sounds good",
       "book it",
+      "that's fine",
+      "ok",
+      "sure",
+      "let's do it",
+      "sounds reasonable",
+      "works for me",
+      "when can you come",
+      "what's your availability",
+      "i'm available",
     ];
     const serviceKeywords = {
-      "Water Heater": ["water heater", "hot water tank", "no hot water"], // Most specific first
-      "Drain Cleaning": [
-        "drain cleaning",
-        "clogged drain",
-        "backed up drain",
-        "snake drain",
+      "Water Heater": [
+        "water heater", 
+        "hot water tank", 
+        "no hot water", 
+        "tank leaking", 
+        "pilot light",
+        "thermostat"
       ],
-      HVAC: [
-        "air condition",
+      "HVAC": [
         "furnace",
-        "ac unit",
-        "hvac",
+        "ac",
+        "air conditioning", 
+        "heating",
+        "cooling",
         "thermostat",
-        "heating system",
+        "heat pump",
         "air handler",
+        "ductwork"
       ],
-      Plumbing: [
+      "Plumbing": [
+        "toilet",
+        "sink", 
+        "faucet",
+        "pipe burst",
+        "leak",
+        "fixture",
+        "shower",
+        "bathtub",
+        "garbage disposal",
         "plumber",
         "plumbing",
-        "pipe",
-        "leak",
-        "toilet",
-        "sink",
-        "faucet",
         "sewer",
-        "valve",
+        "valve"
+      ],
+      "Drain": [
+        "drain cleaning",
+        "clogged drain",
+        "snake",
+        "slow drain",
+        "backup",
+        "sewer",
+        "main line"
       ],
     };
     const emergencyKeywords = [
-      "emergency",
       "flooding",
-      "burst",
+      "burst pipe", 
+      "water everywhere",
       "no heat",
+      "gas smell",
+      "gas leak",
+      "basement flooded",
+      "sewage backup",
       "leaking badly",
+      "emergency",
+      "no hot water",
+      "toilet overflowing",
+      "leak getting worse",
+      "ac not working",
+      "as soon as possible"
     ];
 
     const hasBooked = bookedKeywords.some((kw) =>
@@ -598,6 +883,11 @@ export async function GET() {
       "call.completed",
       "call.transcript.completed",
       "call.summary.completed",
+      "call.recording.completed",
+      "call.ringing",
+      "call.answered",
+      "call.ended",
+      "call.failed",
     ],
     features: [
       "Service fee acceptance detection",
