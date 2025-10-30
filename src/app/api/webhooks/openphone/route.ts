@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase";
+import { readFile } from "fs/promises";
+import path from "path";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// Simple memoized loader for the classification guide
+let classificationGuideCache: string | null = null;
+async function getClassificationGuide(): Promise<string> {
+  if (classificationGuideCache) return classificationGuideCache;
+  try {
+    const guidePath = path.join(process.cwd(), "knowledge", "CALL_CLASSIFICATION_GUIDE.md");
+    const content = await readFile(guidePath, "utf8");
+    classificationGuideCache = content;
+    return content;
+  } catch {
+    return ""; // Fail open if not found
+  }
+}
 
 // Helper function to calculate call duration in seconds
 function calculateDuration(
@@ -655,6 +671,7 @@ async function classifyCallWithClaude(
   }
 
   try {
+    const guideText = await getClassificationGuide();
     const prompt = `You are analyzing a phone call transcript for a plumbing and HVAC company. Extract key details and classify the call.
 
 CALL TRANSCRIPT:
@@ -664,6 +681,9 @@ CALL METADATA:
 - Duration: ${duration} seconds
 - Date: ${callDate}
 - Contact: ${contactName}
+
+BUSINESS CLASSIFICATION GUIDE (authoritative):
+${guideText}
 
 CLASSIFICATION RULES FOR PLUMBING/HVAC BUSINESS:
 
