@@ -119,8 +119,17 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
         {/* Scrollable Content */}
         <div className="overflow-y-auto max-h-[calc(85vh-140px)] p-6">
           {calls.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg gradient-text">No calls in this category yet</p>
+            <div className="text-center py-12 space-y-4">
+              <div className="text-6xl mb-4">📞</div>
+              <p className="text-gray-700 text-xl font-semibold gradient-text">No matching calls found</p>
+              <p className="text-gray-500 text-sm max-w-md mx-auto">
+                There are no calls matching this filter for today. This could mean:
+              </p>
+              <ul className="text-gray-600 text-sm space-y-2 max-w-md mx-auto text-left">
+                <li>• No calls received yet in this category</li>
+                <li>• Calls are still being processed</li>
+                <li>• Check back later as new calls come in</li>
+              </ul>
             </div>
           ) : (
             <div className="space-y-4">
