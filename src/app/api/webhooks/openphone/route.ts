@@ -597,43 +597,59 @@ async function classifyCallWithClaude(
   }
 
   if (!ANTHROPIC_API_KEY) {
-    // Keyword-based fallback
-    const bookedKeywords = [
-      "that's fine",
+    // Keyword-based fallback (when no API key configured)
+    const transcriptLower = transcript.toLowerCase();
+    
+    // Exclusion patterns - NEVER mark as booked
+    const exclusionPatterns = [
+      "calling from",
+      "i'm calling from",
+      "invoice",
+      "bill",
+      "receipt",
+      "payment",
+      "i have the part",
+      "part arrived",
+      "checking status",
+      "just following up",
+      "rebate",
+      "permit"
+    ];
+    
+    const hasExclusion = exclusionPatterns.some(pattern => transcriptLower.includes(pattern));
+    
+    // Scheduling keywords (must be present)
+    const schedulingKeywords = [
+      "when can you come",
+      "what time can you",
+      "tomorrow at",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "i'm available at"
+    ];
+    
+    const hasScheduling = schedulingKeywords.some(kw => transcriptLower.includes(kw));
+    
+    // Agreement keywords
+    const agreementKeywords = [
       "go ahead",
-      "sounds good",
       "yes please",
       "book it",
+      "send someone out"
     ];
+    
+    const hasAgreement = agreementKeywords.some(kw => transcriptLower.includes(kw));
+    
     const serviceKeywords = {
-      "Water Heater": ["water heater", "hot water tank", "no hot water"], // Most specific first
-      "Drain Cleaning": [
-        "drain cleaning",
-        "clogged drain",
-        "backed up drain",
-        "snake drain",
-      ],
-      HVAC: [
-        "air condition",
-        "furnace",
-        "ac unit",
-        "hvac",
-        "thermostat",
-        "heating system",
-        "air handler",
-      ],
-      Plumbing: [
-        "plumber",
-        "plumbing",
-        "pipe",
-        "leak",
-        "toilet",
-        "sink",
-        "faucet",
-        "sewer",
-        "valve",
-      ],
+      "Water Heater": ["water heater", "hot water tank", "no hot water"],
+      "Drain": ["drain cleaning", "clogged drain", "backed up drain", "snake"],
+      "HVAC": ["furnace", "ac unit", "hvac", "air conditioning", "heating"],
+      "Plumbing": ["plumber", "plumbing", "pipe", "leak", "toilet", "sink", "faucet"],
     };
+    
     const emergencyKeywords = [
       "emergency",
       "flooding",
@@ -642,17 +658,13 @@ async function classifyCallWithClaude(
       "leaking badly",
     ];
 
-    const hasBooked = bookedKeywords.some((kw) =>
-      transcript.toLowerCase().includes(kw),
-    );
-    const isEmergency = emergencyKeywords.some((kw) =>
-      transcript.toLowerCase().includes(kw),
-    );
+    const hasBooked = !hasExclusion && hasScheduling && hasAgreement;
+    const isEmergency = emergencyKeywords.some((kw) => transcriptLower.includes(kw));
 
     let serviceType = null;
     for (const [type, keywords] of Object.entries(serviceKeywords)) {
-      if (keywords.some((kw) => transcript.toLowerCase().includes(kw))) {
-        serviceType = type; // Use the key as-is (already properly formatted)
+      if (keywords.some((kw) => transcriptLower.includes(kw))) {
+        serviceType = type;
         break;
       }
     }
@@ -661,10 +673,10 @@ async function classifyCallWithClaude(
       outcome: hasBooked ? "Booked" : "Inquiry",
       booked: hasBooked,
       service_type: serviceType,
-      pipeline_stage: hasBooked ? "Booked" : "New",
+      pipeline_stage: hasBooked ? "Booked" : (hasExclusion ? "Follow-Up" : "Inquiry"),
       sentiment: "Neutral",
       is_emergency: isEmergency,
-      summary: `${serviceType || "General"} inquiry. ${isEmergency ? "EMERGENCY. " : ""}${hasBooked ? "Customer agreed to proceed." : "No commitment yet."}`,
+      summary: `${serviceType || "General"} ${hasExclusion ? "follow-up" : "inquiry"}. ${isEmergency ? "EMERGENCY. " : ""}${hasBooked ? "Customer agreed to proceed." : "No commitment yet."}`,
       notes: "Keyword-based classification (no AI available)",
       confidence_score: 40,
     };
@@ -688,10 +700,23 @@ ${guideText}
 CLASSIFICATION RULES FOR PLUMBING/HVAC BUSINESS:
 
 1. **booked** (boolean):
-   - TRUE if customer explicitly agreed to service or accepted pricing
-   - BOOKING PHRASES: "send someone out", "what time can you be here?", "I'll be home at [time]", "how soon can you get here?", "that works for me", "go ahead", "yes please", "sounds good", "book it", "that's fine", "ok", "sure", "let's do it"
-   - PRICE ACCEPTANCE: "that's fine", "$X is okay", "sounds reasonable", "works for me"
-   - SCHEDULING: "when can you come?", "what's your availability?", "I'm available [day/time]"
+   - TRUE ONLY IF ALL THREE CONDITIONS ARE MET:
+     a) CSR explains service process/fees AND customer acknowledges ("ok", "that's fine", "sounds good", "go ahead")
+     b) Clear scheduling commitment with specific timing ("when can you come?", "tomorrow at X", "Monday morning", "I'm available at [time]")
+     c) Customer is booking NEW service (not just following up on existing work)
+   
+   - AUTOMATIC FALSE (NEVER mark as booked):
+     * Vendor/contractor calls: "This is [name] calling from [company]" or "I'm calling from [business name]"
+     * Invoice/billing questions: mentions "invoice", "bill", "receipt", "payment", "charge"
+     * Parts follow-up: "I have the part", "part arrived", "part is here"
+     * Status checks: "checking status", "just following up on", "what's the status"
+     * Internal staff coordination: employees talking to each other
+   
+   - BOOKING PHRASES (must be combined with service fee discussion):
+     * "send someone out", "what time can you be here?", "I'll be home at [time]"
+     * "how soon can you get here?", "when can you come?", "what's your availability?"
+     * "I'm available [day/time]", "book it for tomorrow"
+   
    - FALSE if just inquiring, price shopping, or no clear commitment
 
 2. **service_type** (string or null):
@@ -764,11 +789,20 @@ RESPONSE (JSON only, no markdown):
     });
 
     if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
+      const errorBody = await response.text();
+      console.error(`Claude API error: ${response.status}`, errorBody);
+      throw new Error(`Claude API error: ${response.status} - ${errorBody.substring(0, 200)}`);
     }
 
     const data = await response.json();
+    
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      console.error("Claude API returned unexpected format:", JSON.stringify(data));
+      throw new Error("Claude API returned unexpected response format");
+    }
+    
     const responseText = data.content[0].text;
+    console.log("[Claude] Classification successful, confidence:", data.content[0].text.match(/"confidence_score":\s*(\d+)/)?.[1] || "unknown");
 
     try {
       const classification = JSON.parse(responseText);
@@ -801,45 +835,83 @@ RESPONSE (JSON only, no markdown):
     console.error("Claude classification error:", error);
 
     // Fall back to keyword-based classification when API fails
-    const bookedKeywords = [
-      "send someone out",
+    const transcriptLower = transcript.toLowerCase();
+    
+    // Exclusion patterns - NEVER mark as booked if these are present
+    const exclusionPatterns = [
+      "calling from",
+      "i'm calling from",
+      "this is .* calling from",
+      "invoice",
+      "bill",
+      "receipt",
+      "payment",
+      "i have the part",
+      "part arrived",
+      "part is here",
+      "checking status",
+      "just following up",
+      "what's the status",
+      "status check",
+      "rebate",
+      "permit",
+      "inspection"
+    ];
+    
+    const hasExclusion = exclusionPatterns.some(pattern => {
+      if (pattern.includes(".*")) {
+        return new RegExp(pattern).test(transcriptLower);
+      }
+      return transcriptLower.includes(pattern);
+    });
+    
+    // Scheduling keywords (must be present for booking)
+    const schedulingKeywords = [
+      "when can you come",
       "what time can you be here",
       "i'll be home at",
       "how soon can you get here",
-      "that works for me",
+      "tomorrow at",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "what's your availability",
+      "i'm available at"
+    ];
+    
+    const hasScheduling = schedulingKeywords.some(kw => transcriptLower.includes(kw));
+    
+    // Agreement keywords (must combine with scheduling)
+    const agreementKeywords = [
+      "send someone out",
       "go ahead",
       "yes please",
-      "sounds good",
       "book it",
       "that's fine",
-      "ok",
-      "sure",
-      "let's do it",
-      "sounds reasonable",
-      "works for me",
-      "when can you come",
-      "what's your availability",
-      "i'm available",
+      "sounds good"
     ];
+    
+    const hasAgreement = agreementKeywords.some(kw => transcriptLower.includes(kw));
+    
     const serviceKeywords = {
       "Water Heater": [
         "water heater", 
         "hot water tank", 
         "no hot water", 
         "tank leaking", 
-        "pilot light",
-        "thermostat"
+        "pilot light"
       ],
       "HVAC": [
         "furnace",
-        "ac",
+        "ac ",
         "air conditioning", 
         "heating",
         "cooling",
-        "thermostat",
         "heat pump",
         "air handler",
-        "ductwork"
+        "hvac"
       ],
       "Plumbing": [
         "toilet",
@@ -850,22 +922,19 @@ RESPONSE (JSON only, no markdown):
         "fixture",
         "shower",
         "bathtub",
-        "garbage disposal",
         "plumber",
         "plumbing",
-        "sewer",
-        "valve"
+        "sewer"
       ],
       "Drain": [
         "drain cleaning",
         "clogged drain",
         "snake",
         "slow drain",
-        "backup",
-        "sewer",
-        "main line"
+        "backup"
       ],
     };
+    
     const emergencyKeywords = [
       "flooding",
       "burst pipe", 
@@ -876,25 +945,23 @@ RESPONSE (JSON only, no markdown):
       "basement flooded",
       "sewage backup",
       "leaking badly",
-      "emergency",
-      "no hot water",
-      "toilet overflowing",
-      "leak getting worse",
-      "ac not working",
-      "as soon as possible"
+      "emergency"
     ];
 
-    const hasBooked = bookedKeywords.some((kw) =>
-      transcript.toLowerCase().includes(kw),
-    );
+    // Only mark as booked if:
+    // 1. No exclusion patterns present
+    // 2. Has scheduling language
+    // 3. Has agreement language
+    const hasBooked = !hasExclusion && hasScheduling && hasAgreement;
+    
     const isEmergency = emergencyKeywords.some((kw) =>
-      transcript.toLowerCase().includes(kw),
+      transcriptLower.includes(kw),
     );
 
     let serviceType = null;
     for (const [type, keywords] of Object.entries(serviceKeywords)) {
-      if (keywords.some((kw) => transcript.toLowerCase().includes(kw))) {
-        serviceType = type; // Use the key as-is (already properly formatted)
+      if (keywords.some((kw) => transcriptLower.includes(kw))) {
+        serviceType = type;
         break;
       }
     }
@@ -903,10 +970,10 @@ RESPONSE (JSON only, no markdown):
       outcome: hasBooked ? "Booked" : "Inquiry",
       booked: hasBooked,
       service_type: serviceType,
-      pipeline_stage: hasBooked ? "Booked" : "New",
+      pipeline_stage: hasBooked ? "Booked" : (hasExclusion ? "Follow-Up" : "Inquiry"),
       sentiment: "Neutral",
       is_emergency: isEmergency,
-      summary: `${serviceType || "General"} inquiry. ${isEmergency ? "EMERGENCY. " : ""}${hasBooked ? "Customer agreed to proceed." : "No commitment yet."}`,
+      summary: `${serviceType || "General"} ${hasExclusion ? "follow-up" : "inquiry"}. ${isEmergency ? "EMERGENCY. " : ""}${hasBooked ? "Customer agreed to proceed." : "No commitment yet."}`,
       notes: "Keyword-based classification (API error fallback)",
       confidence_score: 40,
     };

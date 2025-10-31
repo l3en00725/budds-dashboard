@@ -8,6 +8,7 @@ interface CallDetail {
   call_date: string;
   duration: number;
   transcript: string;
+  ai_summary?: string;
   classified_as_booked: boolean;
   ai_confidence: number;
   is_emergency?: boolean;
@@ -142,14 +143,14 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
                     </div>
                   </div>
 
-                  {/* Transcript */}
-                  {call.transcript && call.transcript !== 'Test webhook - no transcript' && (
+                  {/* AI Summary */}
+                  {call.ai_summary && (
                     <div className="mt-4 p-4 bg-white/60 rounded-xl border border-gray-200">
                       <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
-                        Call Transcript
+                        AI Summary
                       </p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {call.transcript}
+                        {call.ai_summary}
                       </p>
                     </div>
                   )}
