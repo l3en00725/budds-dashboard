@@ -376,6 +376,27 @@ export async function POST(request: NextRequest) {
 
         console.log(`[OpenPhone] ✅ transcript processed`, { callId, transcriptLength: transcriptText.length, duration });
 
+        // NEW: Enhanced AI analysis using refined categorization system
+        try {
+          const direction = callData.direction || existingCall?.direction || 'inbound';
+          await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/calls/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              call_id: callId,
+              transcript: transcriptText,
+              direction,
+              duration,
+              caller_number: callerNumber,
+              call_date: existingCall?.call_date || new Date().toISOString(),
+            }),
+          });
+          console.log(`[OpenPhone] 🤖 Enhanced AI analysis triggered`, { callId });
+        } catch (analysisError) {
+          // Don't fail the webhook if analysis fails
+          console.error(`[OpenPhone] ⚠️ Enhanced analysis failed (non-blocking)`, { callId, error: analysisError });
+        }
+
         return NextResponse.json({
           success: true,
           message: "Transcript processed and call updated",
@@ -482,6 +503,26 @@ export async function POST(request: NextRequest) {
             }
 
             console.log(`✅ Call ${callId} transcript updated from recording event`);
+            
+            // NEW: Enhanced AI analysis using refined categorization system
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/calls/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  call_id: callId,
+                  transcript: transcriptText,
+                  direction: callData.direction || existingCall?.direction || 'inbound',
+                  duration,
+                  caller_number: callerNumber,
+                  call_date: existingCall?.call_date || new Date().toISOString(),
+                }),
+              });
+              console.log(`[OpenPhone] 🤖 Enhanced AI analysis triggered (recording event)`, { callId });
+            } catch (analysisError) {
+              console.error(`[OpenPhone] ⚠️ Enhanced analysis failed (non-blocking)`, { callId, error: analysisError });
+            }
+            
             return NextResponse.json({
               success: true,
               message: "Recording event processed and transcript updated",

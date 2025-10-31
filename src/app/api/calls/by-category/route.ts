@@ -14,9 +14,13 @@ export async function GET(request: NextRequest) {
     const todayStart = getTodayStartET();
     const tomorrowStart = getTomorrowStartET();
 
+    // Join with calls_ai_analysis to get enhanced categorization
     let query = supabase
       .from('openphone_calls')
-      .select('*')
+      .select(`
+        *,
+        analysis:calls_ai_analysis(category, intent, sentiment, service_detail, customer_need, confidence, needs_review)
+      `)
       .gte('call_date', todayStart.toISOString())
       .lt('call_date', tomorrowStart.toISOString())
       .not('call_id', 'like', 'test%')         // Exclude test calls
@@ -26,7 +30,10 @@ export async function GET(request: NextRequest) {
     // Filter by category
     switch (category) {
       case 'booked':
-        query = query.eq('classified_as_booked', true);
+        // Only count inbound calls as booked appointments (matches dashboard calculation)
+        query = query
+          .eq('classified_as_booked', true)
+          .or('direction.is.null,direction.eq.inbound,direction.eq.incoming');
         break;
       case 'emergency':
         // Use is_emergency field if available, otherwise fallback to transcript search

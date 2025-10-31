@@ -14,6 +14,15 @@ interface CallDetail {
   is_emergency?: boolean;
   sentiment?: string;
   service_type?: string;
+  analysis?: {
+    category: string;
+    intent: string;
+    sentiment: string;
+    service_detail: string;
+    customer_need: string;
+    confidence: number;
+    needs_review: boolean;
+  } | null;
 }
 
 interface CallDetailsModalProps {
@@ -143,8 +152,67 @@ export function CallDetailsModal({ isOpen, onClose, title, calls, categoryColor 
                     </div>
                   </div>
 
-                  {/* AI Summary */}
-                  {call.ai_summary && (
+                  {/* Enhanced AI Analysis */}
+                  {call.analysis && (
+                    <div className="mt-4 space-y-3">
+                      {/* Category, Intent, Sentiment badges */}
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-300">
+                          📂 {call.analysis.category}
+                        </span>
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-300">
+                          🎯 {call.analysis.intent}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                          call.analysis.sentiment === 'Positive' ? 'bg-green-100 text-green-700 border-green-300' :
+                          call.analysis.sentiment === 'Negative' ? 'bg-red-100 text-red-700 border-red-300' :
+                          'bg-gray-100 text-gray-700 border-gray-300'
+                        }`}>
+                          {call.analysis.sentiment === 'Positive' ? '😊' : call.analysis.sentiment === 'Negative' ? '😟' : '😐'} {call.analysis.sentiment}
+                        </span>
+                        {call.analysis.needs_review && (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-300">
+                            ⚠️ Needs Review
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Service Detail */}
+                      {call.analysis.service_detail && (
+                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                          <p className="text-xs font-semibold text-indigo-600 mb-1">Service Detail</p>
+                          <p className="text-sm text-indigo-800">{call.analysis.service_detail}</p>
+                        </div>
+                      )}
+                      
+                      {/* Customer Need */}
+                      {call.analysis.customer_need && (
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-xs font-semibold text-green-600 mb-1">Customer Need</p>
+                          <p className="text-sm text-green-800">{call.analysis.customer_need}</p>
+                        </div>
+                      )}
+                      
+                      {/* AI Confidence */}
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <span className="font-semibold">AI Confidence:</span>
+                        <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              call.analysis.confidence >= 0.8 ? 'bg-green-500' :
+                              call.analysis.confidence >= 0.6 ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${call.analysis.confidence * 100}%` }}
+                          ></div>
+                        </div>
+                        <span className="font-mono">{Math.round(call.analysis.confidence * 100)}%</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Fallback to old AI Summary if no new analysis */}
+                  {!call.analysis && call.ai_summary && (
                     <div className="mt-4 p-4 bg-white/60 rounded-xl border border-gray-200">
                       <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
                         AI Summary
